@@ -1,0 +1,1 @@
+import{c as u,r as s}from"./index-2-KmI30T.js";const c=u("Plus",[["path",{d:"M5 12h14",key:"1ays0h"}],["path",{d:"M12 5v14",key:"s699le"}]]);function o(r){const e=s.useRef({value:r,previous:r});return s.useMemo(()=>(e.current.value!==r&&(e.current.previous=e.current.value,e.current.value=r),e.current.previous),[r])}export{c as P,o as u};

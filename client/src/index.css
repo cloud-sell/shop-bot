@@ -1,0 +1,138 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: 'Plus Jakarta Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Premium Purple Light Palette */
+  --background: 260 40% 98%;
+  --foreground: 260 60% 15%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 260 60% 15%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 260 60% 15%;
+
+  --primary: 270 90% 55%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 260 50% 94%;
+  --secondary-foreground: 260 60% 20%;
+
+  --muted: 260 30% 94%;
+  --muted-foreground: 260 20% 45%;
+
+  --accent: 260 50% 94%;
+  --accent-foreground: 260 60% 20%;
+
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+
+  --border: 260 40% 90%;
+  --input: 260 40% 90%;
+  --ring: 270 90% 55%;
+
+  --radius: 1.25rem;
+
+  --bg-gradient: linear-gradient(135deg, #fdf4ff 0%, #fae8ff 50%, #f5f3ff 100%);
+}
+
+.dark {
+  /* Premium Dark Palette */
+  --background: 240 10% 8%;
+  --foreground: 0 0% 100%;
+
+  --card: 240 10% 12%;
+  --card-foreground: 0 0% 100%;
+
+  --popover: 240 10% 12%;
+  --popover-foreground: 0 0% 100%;
+
+  --primary: 275 100% 70%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 240 10% 18%;
+  --secondary-foreground: 0 0% 100%;
+
+  --muted: 240 10% 18%;
+  --muted-foreground: 0 0% 70%;
+
+  --accent: 275 100% 70%;
+  --accent-foreground: 0 0% 100%;
+
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+
+  --border: 240 10% 22%;
+  --input: 240 10% 22%;
+  --ring: 275 100% 70%;
+
+  --bg-gradient: #0d0d12;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply text-foreground antialiased selection:bg-primary/30;
+    background: var(--bg-gradient);
+    background-attachment: fixed;
+    font-family: var(--font-sans);
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-sans);
+    @apply font-bold tracking-tight;
+  }
+}
+
+.glass-panel {
+  @apply bg-[#5b21b6]/60 backdrop-blur-3xl border border-white/20 dark:border-white/10 shadow-4xl;
+}
+
+.glass-card {
+  @apply bg-white/50 dark:bg-purple-900/10 backdrop-blur-2xl border border-white/10 dark:border-white/5 shadow-2xl transition-all duration-500 hover:bg-white/70 dark:hover:bg-purple-900/20 hover:border-primary/30 dark:hover:border-primary/40 hover:shadow-primary/30;
+}
+
+/* Background Animated Orbs matching Image 2 */
+.orb {
+  @apply fixed rounded-full blur-[100px] pointer-events-none mix-blend-screen opacity-50;
+  z-index: -1;
+}
+
+.animate-in {
+  animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Telegram Web App Specific Dark Theme */
+.dark .tg-mini-app {
+  --background: 0 0% 7%;
+  --card: 0 0% 10%;
+  --popover: 0 0% 10%;
+  --border: 0 0% 15%;
+  --input: 0 0% 15%;
+  --bg-gradient: #121212;
+}
+
+.dark body.tg-body {
+  --bg-gradient: #121212 !important;
+  background: #121212 !important;
+}
+
+/* Force mini app body to be neutral, never purple */
+body:has(.tg-mini-app) {
+  background: #ffffff !important;
+}
+.dark body:has(.tg-mini-app) {
+  background: #121212 !important;
+}
