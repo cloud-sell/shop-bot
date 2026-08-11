@@ -332,15 +332,22 @@ async function createCryptoBotInvoice(
     const isTestnet = (await storage.getSetting('CRYPTO_BOT_TESTNET'))?.value === 'true';
     const baseUrl = isTestnet ? 'https://testnet-pay.crypt.bot/api' : 'https://pay.crypt.bot/api';
 
+    const botUsername = (await storage.getSetting('BOT_USERNAME'))?.value || '';
+    const invoiceBody: any = {
+      asset: 'USDT',
+      amount: amountUsd.toFixed(2),
+      payload: payloadStr,
+      description: `Deposit $${amountUsd.toFixed(2)} to ShopBot`
+    };
+
+    if (botUsername) {
+      invoiceBody.paid_btn_name = 'openBot';
+      invoiceBody.paid_btn_url = `https://t.me/${botUsername.replace('@', '')}`;
+    }
+
     const res = await axios.post(
       `${baseUrl}/createInvoice`,
-      {
-        asset: 'USDT',
-        amount: amountUsd.toFixed(2),
-        payload: payloadStr,
-        description: `Deposit $${amountUsd.toFixed(2)} to ShopBot`,
-        paid_btn_name: 'openBot'
-      },
+      invoiceBody,
       {
         headers: {
           'Crypto-Pay-API-Token': apiToken,
