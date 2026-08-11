@@ -3607,8 +3607,54 @@ const setupBotHandlers = (targetBot: TelegramBot) => {
 
       if (data.startsWith('check_payment_')) {
         const paymentId = parseInt(data.substring(14));
+        const paymentCheck = await storage.getPayment(paymentId);
 
-        // Atomically lock and transition payment status to processing
+        if (paymentCheck && paymentCheck.paymentMethod === 'cryptobot') {
+          if (paymentCheck.status === 'completed') {
+            await targetBot.answerCallbackQuery(query.id, { text: "Payment already verified!", show_alert: true }).catch(() => {});
+            return;
+          }
+
+          if (!paymentCheck.externalId) {
+            await targetBot.answerCallbackQuery(query.id, { text: "Payment not found yet.", show_alert: true }).catch(() => {});
+            return;
+          }
+
+          const check = await checkCryptoBotInvoiceStatus(paymentCheck.externalId);
+          if (check.paid) {
+            // ATOMIC DB UPDATE TO PREVENT DOUBLE CREDITING
+            const [updatedPayment] = await db.update(payments)
+              .set({ status: 'completed', updatedAt: new Date() })
+              .where(and(eq(payments.id, paymentCheck.id), ne(payments.status, 'completed')))
+              .returning();
+
+            if (updatedPayment) {
+              await db.execute(sql`UPDATE telegram_users SET balance = balance + ${updatedPayment.amount} WHERE id = ${updatedPayment.telegramUserId}`);
+              await targetBot.answerCallbackQuery(query.id, { text: `✅ Payment verified! $${(updatedPayment.amount / 100).toFixed(2)} credited.`, show_alert: true }).catch(() => {});
+              await targetBot.sendMessage(chatId, `✅ <b>@CryptoBot Payment Verified!</b>\n\n💰 Credited: <b>$${(updatedPayment.amount / 100).toFixed(2)}</b> has been added to your balance. Thank you! 🤍`, { parse_mode: 'HTML' });
+
+              const userDisplayName = tgUser?.firstName || tgUser?.username || "User";
+              io.emit('admin_notification', {
+                type: 'deposit',
+                title: 'New @CryptoBot Deposit',
+                message: `${userDisplayName} deposited $${(updatedPayment.amount / 100).toFixed(2)} via @CryptoBot`,
+                data: { paymentId: updatedPayment.id, userId: tgUser?.telegramId, amount: updatedPayment.amount / 100, txId: paymentCheck.externalId }
+              });
+
+              sendAdminPushNotification(
+                'New @CryptoBot Deposit',
+                `${userDisplayName} deposited $${(updatedPayment.amount / 100).toFixed(2)}`
+              ).catch(console.error);
+            } else {
+              await targetBot.answerCallbackQuery(query.id, { text: "Payment already verified!", show_alert: true }).catch(() => {});
+            }
+          } else {
+            await targetBot.answerCallbackQuery(query.id, { text: "Payment not found yet.", show_alert: true }).catch(() => {});
+          }
+          return;
+        }
+
+        // Atomically lock and transition payment status to processing for TRC20 / Aptos / Binance / Cryptomus
         const payment = await db.transaction(async (tx) => {
           const [p] = await tx.select().from(payments).where(eq(payments.id, paymentId)).for('update');
           if (!p) return null;
@@ -3634,48 +3680,6 @@ const setupBotHandlers = (targetBot: TelegramBot) => {
         if (payment.createdAt && new Date(payment.createdAt) < oneHourAgo) {
           await storage.updatePayment(payment.id, { status: 'expired' });
           await targetBot.sendMessage(chatId, `<tg-emoji emoji-id="6298544405435387645">❌</tg-emoji> <b>This payment request has expired (1 hour limit). Please create a new one.</b>`, { parse_mode: 'HTML' });
-          return;
-        }
-
-        if (payment.paymentMethod === 'cryptobot') {
-          if (!payment.externalId) {
-            await storage.updatePayment(payment.id, { status: 'pending' });
-            await targetBot.answerCallbackQuery(query.id, { text: "Payment not found yet.", show_alert: true }).catch(() => {});
-            return;
-          }
-
-          const check = await checkCryptoBotInvoiceStatus(payment.externalId);
-          if (check.paid) {
-            // ATOMIC DB UPDATE TO PREVENT DOUBLE CREDITING
-            const [updatedPayment] = await db.update(payments)
-              .set({ status: 'completed', updatedAt: new Date() })
-              .where(and(eq(payments.id, payment.id), eq(payments.status, 'processing')))
-              .returning();
-
-            if (updatedPayment) {
-              await db.execute(sql`UPDATE telegram_users SET balance = balance + ${updatedPayment.amount} WHERE id = ${updatedPayment.telegramUserId}`);
-              await targetBot.answerCallbackQuery(query.id, { text: `✅ Payment verified! $${(updatedPayment.amount / 100).toFixed(2)} credited.`, show_alert: true }).catch(() => {});
-              await targetBot.sendMessage(chatId, `✅ <b>@CryptoBot Payment Verified!</b>\n\n💰 Credited: <b>$${(updatedPayment.amount / 100).toFixed(2)}</b> has been added to your balance. Thank you! 🤍`, { parse_mode: 'HTML' });
-
-              const userDisplayName = tgUser?.firstName || tgUser?.username || "User";
-              io.emit('admin_notification', {
-                type: 'deposit',
-                title: 'New @CryptoBot Deposit',
-                message: `${userDisplayName} deposited $${(updatedPayment.amount / 100).toFixed(2)} via @CryptoBot`,
-                data: { paymentId: updatedPayment.id, userId: tgUser?.telegramId, amount: updatedPayment.amount / 100, txId: payment.externalId }
-              });
-
-              sendAdminPushNotification(
-                'New @CryptoBot Deposit',
-                `${userDisplayName} deposited $${(updatedPayment.amount / 100).toFixed(2)}`
-              ).catch(console.error);
-            } else {
-              await targetBot.answerCallbackQuery(query.id, { text: "Payment already processed.", show_alert: true }).catch(() => {});
-            }
-          } else {
-            await storage.updatePayment(payment.id, { status: 'pending' });
-            await targetBot.answerCallbackQuery(query.id, { text: "Payment not found yet.", show_alert: true }).catch(() => {});
-          }
           return;
         }
 
