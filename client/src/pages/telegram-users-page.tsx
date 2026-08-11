@@ -26,9 +26,11 @@ export default function TelegramUsersPage() {
   const [editBalance, setEditBalance] = useState<number>(0);
   const [search, setSearch] = useState("");
 
-  const { data: users = [], isLoading } = useQuery<TelegramUser[]>({
+  const { data: usersData, isLoading } = useQuery<TelegramUser[]>({
     queryKey: ["/api/telegram-users"],
   });
+
+  const users: TelegramUser[] = Array.isArray(usersData) ? usersData : [];
 
   const mutation = useMutation({
     mutationFn: async ({ id, balance }: { id: number; balance: number }) => {
@@ -66,10 +68,13 @@ export default function TelegramUsersPage() {
   });
 
   const filteredUsers = users.filter((user) => {
-    const searchLower = search.toLowerCase();
-    const fullName = `${user.firstName || ""} ${user.lastName || ""}`.toLowerCase();
-    const username = user.username?.toLowerCase() || "";
-    const telegramId = user.telegramId.toLowerCase();
+    if (!user) return false;
+    const searchLower = (search || "").toLowerCase();
+    const firstName = String(user.firstName || "");
+    const lastName = String(user.lastName || "");
+    const fullName = `${firstName} ${lastName}`.toLowerCase();
+    const username = String(user.username || "").toLowerCase();
+    const telegramId = String(user.telegramId || "").toLowerCase();
 
     return (
       fullName.includes(searchLower) ||
@@ -80,7 +85,7 @@ export default function TelegramUsersPage() {
 
   const handleEdit = (user: TelegramUser) => {
     setEditingId(user.id);
-    setEditBalance(user.balance / 100);
+    setEditBalance((user.balance || 0) / 100);
   };
 
   const handleSave = () => {
@@ -113,7 +118,7 @@ export default function TelegramUsersPage() {
 
       <div className="space-y-4">
         {isLoading ? (
-          <div className="flex justify-center">
+          <div className="flex justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
           </div>
         ) : filteredUsers.length === 0 ? (
@@ -125,71 +130,78 @@ export default function TelegramUsersPage() {
             </CardContent>
           </Card>
         ) : (
-          filteredUsers.map((user) => (
-            <Card key={user.id} className={`glass-card border-0 ${user.isBanned ? 'opacity-85 border border-red-500/20 bg-red-950/10' : ''}`}>
-              <CardContent className="pt-6">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-3">
-                      <p className="font-bold text-white text-lg">
-                        {user.firstName || ""} {user.lastName || ""}
+          filteredUsers.map((user) => {
+            const isUserBanned = Boolean(user.isBanned);
+            const userDisplayName = (user.firstName || user.lastName)
+              ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
+              : (user.username ? `@${user.username}` : `User ${user.telegramId || user.id}`);
+
+            return (
+              <Card key={user.id} className={`glass-card border-0 ${isUserBanned ? 'opacity-85 border border-red-500/20 bg-red-950/10' : ''}`}>
+                <CardContent className="pt-6">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-3">
+                        <p className="font-bold text-white text-lg">
+                          {userDisplayName}
+                        </p>
+                        {isUserBanned ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1">
+                            <Ban className="w-3 h-3" /> BANNED
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                            <ShieldCheck className="w-3 h-3" /> ACTIVE
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-white/60">
+                        ID: {String(user.telegramId || user.id)} {user.username ? `(@${user.username})` : ""}
                       </p>
-                      {user.isBanned ? (
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1">
-                          <Ban className="w-3 h-3" /> BANNED
-                        </span>
-                      ) : (
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                          <ShieldCheck className="w-3 h-3" /> ACTIVE
-                        </span>
-                      )}
+                      <p className="text-xs text-white/40 font-medium">
+                        Balance: ${(((user.balance || 0)) / 100).toFixed(2)}
+                      </p>
                     </div>
-                    <p className="text-sm text-white/60">
-                      ID: {user.telegramId} {user.username && `(@${user.username})`}
-                    </p>
-                    <p className="text-xs text-white/40 font-medium">
-                      Balance: ${(user.balance / 100).toFixed(2)}
-                    </p>
-                  </div>
 
-                  <div className="flex items-center gap-3">
-                    <Button
-                      onClick={() => banMutation.mutate({ id: user.id, isBanned: !user.isBanned })}
-                      disabled={banMutation.isPending}
-                      variant="outline"
-                      size="sm"
-                      className={
-                        user.isBanned
-                          ? "border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 bg-emerald-950/20"
-                          : "border-red-500/30 text-red-400 hover:bg-red-500/20 bg-red-950/20"
-                      }
-                      data-testid={`button-ban-user-${user.id}`}
-                    >
-                      {user.isBanned ? (
-                        <>
-                          <ShieldCheck className="w-4 h-4 mr-1.5 text-emerald-400" /> Unban User
-                        </>
-                      ) : (
-                        <>
-                          <Ban className="w-4 h-4 mr-1.5 text-red-400" /> Ban User
-                        </>
-                      )}
-                    </Button>
+                    <div className="flex items-center gap-3">
+                      <Button
+                        onClick={() => banMutation.mutate({ id: user.id, isBanned: !isUserBanned })}
+                        disabled={banMutation.isPending}
+                        variant="outline"
+                        size="sm"
+                        className={
+                          isUserBanned
+                            ? "border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 bg-emerald-950/20"
+                            : "border-red-500/30 text-red-400 hover:bg-red-500/20 bg-red-950/20"
+                        }
+                        data-testid={`button-ban-user-${user.id}`}
+                      >
+                        {isUserBanned ? (
+                          <>
+                            <ShieldCheck className="w-4 h-4 mr-1.5 text-emerald-400" /> Unban User
+                          </>
+                        ) : (
+                          <>
+                            <Ban className="w-4 h-4 mr-1.5 text-red-400" /> Ban User
+                          </>
+                        )}
+                      </Button>
 
-                    <Button
-                      onClick={() => handleEdit(user)}
-                      variant="ghost"
-                      size="icon"
-                      className="text-purple-400 hover:bg-purple-500/10"
-                      data-testid={`button-edit-user-${user.id}`}
-                    >
-                      <Edit2 className="w-5 h-5" />
-                    </Button>
+                      <Button
+                        onClick={() => handleEdit(user)}
+                        variant="ghost"
+                        size="icon"
+                        className="text-purple-400 hover:bg-purple-500/10"
+                        data-testid={`button-edit-user-${user.id}`}
+                      >
+                        <Edit2 className="w-5 h-5" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
+                </CardContent>
+              </Card>
+            );
+          })
         )}
       </div>
 
