@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Save, Loader2, Edit2, Search } from "lucide-react";
+import { Users, Save, Loader2, Edit2, Search, Ban, ShieldCheck } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface TelegramUser {
@@ -16,6 +16,7 @@ interface TelegramUser {
   firstName?: string;
   lastName?: string;
   balance: number;
+  isBanned?: boolean;
   createdAt: string;
 }
 
@@ -46,12 +47,30 @@ export default function TelegramUsersPage() {
     },
   });
 
+  const banMutation = useMutation({
+    mutationFn: async ({ id, isBanned }: { id: number; isBanned: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/telegram-users/${id}`, {
+        isBanned,
+      });
+      return res.json();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/telegram-users"] });
+      toast({
+        title: variables.isBanned ? "User Banned" : "User Unbanned",
+        description: variables.isBanned
+          ? "User has been banned from using the Telegram bot."
+          : "User has been unbanned and restored access to the bot.",
+      });
+    },
+  });
+
   const filteredUsers = users.filter((user) => {
     const searchLower = search.toLowerCase();
     const fullName = `${user.firstName || ""} ${user.lastName || ""}`.toLowerCase();
     const username = user.username?.toLowerCase() || "";
     const telegramId = user.telegramId.toLowerCase();
-    
+
     return (
       fullName.includes(searchLower) ||
       username.includes(searchLower) ||
@@ -107,29 +126,66 @@ export default function TelegramUsersPage() {
           </Card>
         ) : (
           filteredUsers.map((user) => (
-            <Card key={user.id} className="glass-card border-0">
+            <Card key={user.id} className={`glass-card border-0 ${user.isBanned ? 'opacity-85 border border-red-500/20 bg-red-950/10' : ''}`}>
               <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="space-y-1">
-                    <p className="font-bold text-white">
-                      {user.firstName || ""} {user.lastName || ""}
-                    </p>
+                    <div className="flex items-center gap-3">
+                      <p className="font-bold text-white text-lg">
+                        {user.firstName || ""} {user.lastName || ""}
+                      </p>
+                      {user.isBanned ? (
+                        <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1">
+                          <Ban className="w-3 h-3" /> BANNED
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                          <ShieldCheck className="w-3 h-3" /> ACTIVE
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm text-white/60">
                       ID: {user.telegramId} {user.username && `(@${user.username})`}
                     </p>
-                    <p className="text-xs text-white/40">
+                    <p className="text-xs text-white/40 font-medium">
                       Balance: ${(user.balance / 100).toFixed(2)}
                     </p>
                   </div>
-                  <Button
-                    onClick={() => handleEdit(user)}
-                    variant="ghost"
-                    size="icon"
-                    className="text-purple-400"
-                    data-testid={`button-edit-user-${user.id}`}
-                  >
-                    <Edit2 className="w-5 h-5" />
-                  </Button>
+
+                  <div className="flex items-center gap-3">
+                    <Button
+                      onClick={() => banMutation.mutate({ id: user.id, isBanned: !user.isBanned })}
+                      disabled={banMutation.isPending}
+                      variant="outline"
+                      size="sm"
+                      className={
+                        user.isBanned
+                          ? "border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 bg-emerald-950/20"
+                          : "border-red-500/30 text-red-400 hover:bg-red-500/20 bg-red-950/20"
+                      }
+                      data-testid={`button-ban-user-${user.id}`}
+                    >
+                      {user.isBanned ? (
+                        <>
+                          <ShieldCheck className="w-4 h-4 mr-1.5 text-emerald-400" /> Unban User
+                        </>
+                      ) : (
+                        <>
+                          <Ban className="w-4 h-4 mr-1.5 text-red-400" /> Ban User
+                        </>
+                      )}
+                    </Button>
+
+                    <Button
+                      onClick={() => handleEdit(user)}
+                      variant="ghost"
+                      size="icon"
+                      className="text-purple-400 hover:bg-purple-500/10"
+                      data-testid={`button-edit-user-${user.id}`}
+                    >
+                      <Edit2 className="w-5 h-5" />
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>

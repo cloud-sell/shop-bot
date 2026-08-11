@@ -2374,6 +2374,13 @@ const setupBotHandlers = (targetBot: TelegramBot) => {
       const tgUser = await storage.getTelegramUser(userId);
       if (!tgUser) return;
 
+      if (tgUser.isBanned) {
+        const bannedMsg = `<tg-emoji emoji-id="6298544405435387645">🚫</tg-emoji> <b>Access Prohibited</b>\n\nYour account has been suspended by the administrator. Please contact support if you believe this is an error.`;
+        await targetBot.answerCallbackQuery(query.id, { text: "🚫 Access Prohibited. Account suspended.", show_alert: true }).catch(() => {});
+        await targetBot.sendMessage(chatId, bannedMsg, { parse_mode: 'HTML' }).catch(() => {});
+        return;
+      }
+
       // Start fast countdown on any button interaction
       try {
         const activeOffers = await storage.getActiveSpecialOffers();
@@ -4714,6 +4721,12 @@ const setupBotHandlers = (targetBot: TelegramBot) => {
       if (!userId) return;
 
       const tgUser = await storage.getTelegramUser(userId);
+
+      if (tgUser && tgUser.isBanned) {
+        const bannedMsg = `<tg-emoji emoji-id="6298544405435387645">🚫</tg-emoji> <b>Access Prohibited</b>\n\nYour account has been suspended by the administrator. Please contact support if you believe this is an error.`;
+        await targetBot.sendMessage(chatId, bannedMsg, { parse_mode: 'HTML' }).catch(() => {});
+        return;
+      }
 
       // Standardize text comparison by trimming and ignoring case if necessary
       const normalizedText = text?.trim();
