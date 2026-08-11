@@ -21,6 +21,7 @@ const BroadcastPage = lazy(() => import("@/pages/broadcast-page"));
 const LoginPage = lazy(() => import("@/pages/login-page"));
 const SpecialOffersPage = lazy(() => import("@/pages/special-offers-page"));
 const TelegramUsersPage = lazy(() => import("@/pages/telegram-users-page"));
+const SpamProtectorPage = lazy(() => import("@/pages/spam-protector-page"));
 const TelegramClientPage = lazy(() => import("@/pages/telegram-client-page"));
 const BackupPage = lazy(() => import("@/pages/backup-page"));
 const ForwardPage = lazy(() => import("@/pages/forward-page"));
@@ -111,6 +112,10 @@ function Router() {
 
         <Route path="/users">
           <ProtectedRoute component={TelegramUsersPage} />
+        </Route>
+
+        <Route path="/spam-protector">
+          <ProtectedRoute component={SpamProtectorPage} />
         </Route>
 
         <Route path="/telegram-client">

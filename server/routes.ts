@@ -2081,6 +2081,97 @@ app.post("/api/backups/trigger", isAuth, async (req, res) => {
   res.json({ message: "Backup triggered successfully" });
 });
 
+// Anti-Spam Protection API Endpoints
+app.get("/api/spam-protector/stats", isAuth, async (req, res) => {
+  try {
+    const autoBanEnabled = (await storage.getSetting('SPAM_AUTO_BAN_ENABLED'))?.value !== 'false';
+    const maxReqPerMin = parseInt((await storage.getSetting('SPAM_MAX_REQ_PER_MIN'))?.value || '15', 10);
+    const tempBanDurationMins = parseInt((await storage.getSetting('SPAM_TEMP_BAN_DURATION_MINS'))?.value || '15', 10);
+
+    const allUsers = await storage.getAllTelegramUsers();
+    const now = Date.now();
+
+    const userStats = allUsers.map(u => {
+      const timestamps = (userRequestTimestamps.get(u.telegramId) || []).filter(t => now - t < 60000);
+      const isTempBanned = Boolean(u.bannedUntil && new Date(u.bannedUntil).getTime() > now);
+      return {
+        id: u.id,
+        telegramId: u.telegramId,
+        username: u.username,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        balance: u.balance,
+        isBanned: u.isBanned,
+        bannedUntil: u.bannedUntil,
+        isTempBanned,
+        spamViolations: u.spamViolations || 0,
+        lastRequestAt: u.lastRequestAt,
+        reqPerMin: timestamps.length
+      };
+    });
+
+    userStats.sort((a, b) => b.reqPerMin - a.reqPerMin || b.spamViolations - a.spamViolations);
+    const totalBannedUsers = userStats.filter(u => u.isBanned || u.isTempBanned).length;
+
+    res.json({
+      autoBanEnabled,
+      maxReqPerMin,
+      tempBanDurationMins,
+      totalMonitoredUsers: allUsers.length,
+      totalBannedUsers,
+      users: userStats
+    });
+  } catch (err) {
+    console.error("Anti-Spam stats error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.post("/api/spam-protector/config", isAuth, async (req, res) => {
+  try {
+    const { autoBanEnabled, maxReqPerMin, tempBanDurationMins } = req.body;
+    if (typeof autoBanEnabled === 'boolean') {
+      await storage.updateSetting('SPAM_AUTO_BAN_ENABLED', String(autoBanEnabled));
+    }
+    if (maxReqPerMin !== undefined) {
+      await storage.updateSetting('SPAM_MAX_REQ_PER_MIN', String(maxReqPerMin));
+    }
+    if (tempBanDurationMins !== undefined) {
+      await storage.updateSetting('SPAM_TEMP_BAN_DURATION_MINS', String(tempBanDurationMins));
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Anti-Spam config error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.post("/api/spam-protector/ban", isAuth, async (req, res) => {
+  try {
+    const { userId, action } = req.body;
+    const id = parseInt(userId, 10);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid user ID" });
+
+    const now = Date.now();
+    if (action === 'temp_15m') {
+      await storage.updateTelegramUser(id, { bannedUntil: new Date(now + 15 * 60 * 1000) });
+    } else if (action === 'temp_1h') {
+      await storage.updateTelegramUser(id, { bannedUntil: new Date(now + 60 * 60 * 1000) });
+    } else if (action === 'temp_24h') {
+      await storage.updateTelegramUser(id, { bannedUntil: new Date(now + 24 * 60 * 60 * 1000) });
+    } else if (action === 'perm_ban') {
+      await storage.updateTelegramUser(id, { isBanned: true, bannedUntil: null });
+    } else if (action === 'unban') {
+      await storage.updateTelegramUser(id, { isBanned: false, bannedUntil: null });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Anti-Spam ban action error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 const patchBotMethods = (targetBot: TelegramBot) => {
   if ((targetBot as any).__patched) return;
   (targetBot as any).__patched = true;
@@ -2334,6 +2425,90 @@ const setupBotHandlers = (targetBot: TelegramBot) => {
   // Handle interactive features for both bots if they are groups/channels
   // But commands and user profiles are handled by the main bot (bot variable)
   
+// Anti-Spam Rate Limiter sliding window (user_id -> timestamps of requests in last 60 seconds)
+const userRequestTimestamps = new Map<string, number[]>();
+
+async function processAntiSpamCheck(userId: string, chatId: number, queryId?: string): Promise<boolean> {
+  try {
+    const tgUser = await storage.getTelegramUser(userId);
+    if (!tgUser) return false;
+
+    const now = Date.now();
+
+    // 1. Permanent Ban Check
+    if (tgUser.isBanned) {
+      const bannedMsg = `<tg-emoji emoji-id="6298544405435387645">🚫</tg-emoji> <b>Access Prohibited</b>\n\nYour account has been permanently suspended by the administrator. Please contact support if you believe this is an error.`;
+      if (queryId && targetBot) {
+        await targetBot.answerCallbackQuery(queryId, { text: "🚫 Access Prohibited. Account suspended.", show_alert: true }).catch(() => {});
+      }
+      if (targetBot) {
+        await targetBot.sendMessage(chatId, bannedMsg, { parse_mode: 'HTML' }).catch(() => {});
+      }
+      return true;
+    }
+
+    // 2. Temporary Ban Check
+    if (tgUser.bannedUntil && new Date(tgUser.bannedUntil).getTime() > now) {
+      const untilStr = new Date(tgUser.bannedUntil).toLocaleString('en-US');
+      const remainingMins = Math.ceil((new Date(tgUser.bannedUntil).getTime() - now) / (60 * 1000));
+      const tempBannedMsg = `<tg-emoji emoji-id="6298544405435387645">⚠️</tg-emoji> <b>Access Temporarily Restricted</b>\n\nYour account has been temporarily restricted for high request activity (Spam Protection).\n\n⏱️ <b>Remaining time:</b> ${remainingMins} minute(s)\n📌 <b>Unbans at:</b> ${untilStr}`;
+      if (queryId && targetBot) {
+        await targetBot.answerCallbackQuery(queryId, { text: `⚠️ Account suspended (${remainingMins}m remaining).`, show_alert: true }).catch(() => {});
+      }
+      if (targetBot) {
+        await targetBot.sendMessage(chatId, tempBannedMsg, { parse_mode: 'HTML' }).catch(() => {});
+      }
+      return true;
+    }
+
+    // 3. Sliding Window Rate Calculation
+    let timestamps = userRequestTimestamps.get(userId) || [];
+    timestamps = timestamps.filter(t => now - t < 60000);
+    timestamps.push(now);
+    userRequestTimestamps.set(userId, timestamps);
+
+    // Update lastRequestAt timestamp
+    await storage.updateTelegramUser(tgUser.id, { lastRequestAt: new Date(now) }).catch(() => {});
+
+    // Fetch Anti-Spam settings
+    const autoBanEnabled = (await storage.getSetting('SPAM_AUTO_BAN_ENABLED'))?.value !== 'false';
+    const maxReqPerMin = parseInt((await storage.getSetting('SPAM_MAX_REQ_PER_MIN'))?.value || '15', 10);
+    const tempBanMins = parseInt((await storage.getSetting('SPAM_TEMP_BAN_DURATION_MINS'))?.value || '15', 10);
+
+    // Trigger Anti-Spam Auto-Ban if threshold exceeded
+    if (autoBanEnabled && timestamps.length > maxReqPerMin) {
+      const banUntil = new Date(now + tempBanMins * 60 * 1000);
+      const newViolations = (tgUser.spamViolations || 0) + 1;
+      await storage.updateTelegramUser(tgUser.id, {
+        bannedUntil: banUntil,
+        spamViolations: newViolations
+      });
+
+      const alertMsg = `<tg-emoji emoji-id="6298544405435387645">🚨</tg-emoji> <b>Anti-Spam Alert: Account Suspended!</b>\n\nYou exceeded maximum allowed requests (${timestamps.length}/${maxReqPerMin} per min).\n\n⏱️ Your account is temporarily suspended for <b>${tempBanMins} minutes</b>.`;
+      if (queryId && targetBot) {
+        await targetBot.answerCallbackQuery(queryId, { text: `🚨 Anti-Spam: ${tempBanMins}m suspension issued.`, show_alert: true }).catch(() => {});
+      }
+      if (targetBot) {
+        await targetBot.sendMessage(chatId, alertMsg, { parse_mode: 'HTML' }).catch(() => {});
+      }
+
+      const userDisplayName = tgUser.firstName || tgUser.username || `User ${userId}`;
+      io.emit('admin_notification', {
+        type: 'anti_spam',
+        title: '🚨 Anti-Spam Auto-Ban Triggered',
+        message: `${userDisplayName} auto-suspended for ${tempBanMins} mins (${timestamps.length} req/min)`,
+        data: { userId, telegramId: userId, rate: timestamps.length, bannedUntil: banUntil }
+      });
+
+      return true;
+    }
+  } catch (err) {
+    console.error("Error in processAntiSpamCheck:", err);
+  }
+
+  return false;
+}
+
   const processedCallbacks = new Set<string>();
 
   targetBot.on('callback_query', async (query) => {
@@ -2371,15 +2546,8 @@ const setupBotHandlers = (targetBot: TelegramBot) => {
       console.log(`[Bot Callback] Checking if main bot: targetBot.token === bot.token is ${isMainBot}. targetBot token hash=${targetBot.token ? targetBot.token.substring(0, 12) : 'none'}, bot token hash=${bot?.token ? bot.token.substring(0, 12) : 'none'}`);
       if (!isMainBot) return;
 
-      const tgUser = await storage.getTelegramUser(userId);
-      if (!tgUser) return;
-
-      if (tgUser.isBanned) {
-        const bannedMsg = `<tg-emoji emoji-id="6298544405435387645">🚫</tg-emoji> <b>Access Prohibited</b>\n\nYour account has been suspended by the administrator. Please contact support if you believe this is an error.`;
-        await targetBot.answerCallbackQuery(query.id, { text: "🚫 Access Prohibited. Account suspended.", show_alert: true }).catch(() => {});
-        await targetBot.sendMessage(chatId, bannedMsg, { parse_mode: 'HTML' }).catch(() => {});
-        return;
-      }
+      const isBlocked = await processAntiSpamCheck(userId, chatId, query.id);
+      if (isBlocked) return;
 
       // Start fast countdown on any button interaction
       try {
@@ -4720,13 +4888,8 @@ const setupBotHandlers = (targetBot: TelegramBot) => {
       const userId = msg.from?.id.toString();
       if (!userId) return;
 
-      const tgUser = await storage.getTelegramUser(userId);
-
-      if (tgUser && tgUser.isBanned) {
-        const bannedMsg = `<tg-emoji emoji-id="6298544405435387645">🚫</tg-emoji> <b>Access Prohibited</b>\n\nYour account has been suspended by the administrator. Please contact support if you believe this is an error.`;
-        await targetBot.sendMessage(chatId, bannedMsg, { parse_mode: 'HTML' }).catch(() => {});
-        return;
-      }
+      const isBlocked = await processAntiSpamCheck(userId, chatId);
+      if (isBlocked) return;
 
       // Standardize text comparison by trimming and ignoring case if necessary
       const normalizedText = text?.trim();
