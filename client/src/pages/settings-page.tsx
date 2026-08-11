@@ -18,6 +18,9 @@ export default function SettingsPage() {
   const [supportContact, setSupportContact] = useState("");
   const [cryptomusApiKey, setCryptomusApiKey] = useState("");
   const [cryptomusMerchantId, setCryptomusMerchantId] = useState("");
+  const [cryptoBotToken, setCryptoBotToken] = useState("");
+  const [cryptoBotEnabled, setCryptoBotEnabled] = useState(true);
+  const [cryptoBotTestnet, setCryptoBotTestnet] = useState(false);
   const [binanceApiKey, setBinanceApiKey] = useState("");
   const [binanceSecretKey, setBinanceSecretKey] = useState("");
   const [binancePayId, setBinancePayId] = useState("");
@@ -92,6 +95,18 @@ export default function SettingsPage() {
 
   const { data: cryptomusEnabledSetting, isLoading: isCryptomusEnabledLoading } = useQuery<{ key: string, value: string }>({
     queryKey: ["/api/settings/PAYMENT_CRYPTOMUS_ENABLED"],
+  });
+
+  const { data: cryptoBotEnabledSetting } = useQuery<{ key: string, value: string }>({
+    queryKey: ["/api/settings/PAYMENT_CRYPTOBOT_ENABLED"],
+  });
+
+  const { data: cryptoBotTokenSetting } = useQuery<{ key: string, value: string }>({
+    queryKey: ["/api/settings/CRYPTO_BOT_API_TOKEN"],
+  });
+
+  const { data: cryptoBotTestnetSetting } = useQuery<{ key: string, value: string }>({
+    queryKey: ["/api/settings/CRYPTO_BOT_TESTNET"],
   });
 
   const { data: trc20EnabledSetting, isLoading: isTrc20EnabledLoading } = useQuery<{ key: string, value: string }>({
@@ -182,6 +197,18 @@ export default function SettingsPage() {
   useEffect(() => {
     if (cryptomusEnabledSetting?.value !== undefined) setCryptomusEnabled(cryptomusEnabledSetting.value === "true");
   }, [cryptomusEnabledSetting]);
+
+  useEffect(() => {
+    if (cryptoBotEnabledSetting?.value !== undefined) setCryptoBotEnabled(cryptoBotEnabledSetting.value !== "false");
+  }, [cryptoBotEnabledSetting]);
+
+  useEffect(() => {
+    if (cryptoBotTokenSetting?.value !== undefined) setCryptoBotToken(cryptoBotTokenSetting.value);
+  }, [cryptoBotTokenSetting]);
+
+  useEffect(() => {
+    if (cryptoBotTestnetSetting?.value !== undefined) setCryptoBotTestnet(cryptoBotTestnetSetting.value === "true");
+  }, [cryptoBotTestnetSetting]);
 
   useEffect(() => {
     if (trc20EnabledSetting?.value !== undefined) setTrc20Enabled(trc20EnabledSetting.value === "true");
@@ -410,6 +437,23 @@ export default function SettingsPage() {
       toast({
         title: "Cryptomus Merchant ID Updated",
         description: "Merchant ID has been saved.",
+      });
+    }
+  });
+
+  const cryptoBotTokenMutation = useMutation({
+    mutationFn: async (value: string) => {
+      const res = await apiRequest("POST", "/api/settings", {
+        key: "CRYPTO_BOT_API_TOKEN",
+        value
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/CRYPTO_BOT_API_TOKEN"] });
+      toast({
+        title: "CryptoBot Token Updated",
+        description: "@CryptoBot API Token has been saved.",
       });
     }
   });
@@ -1266,6 +1310,67 @@ export default function SettingsPage() {
           </div>
 
           <CardContent className="p-8 space-y-12">
+            {/* CryptoBot Section */}
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <h3 className="text-lg font-bold text-cyan-400">@CryptoBot Integration</h3>
+                  <Button
+                    variant={cryptoBotTestnet ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => {
+                      const newValue = !cryptoBotTestnet;
+                      setCryptoBotTestnet(newValue);
+                      togglePaymentMutation.mutate({ key: "CRYPTO_BOT_TESTNET", value: newValue.toString() });
+                    }}
+                    className={cryptoBotTestnet ? "bg-amber-500 hover:bg-amber-600 text-xs" : "border-white/20 text-xs text-white/60"}
+                  >
+                    {cryptoBotTestnet ? "Testnet Mode" : "Mainnet Mode"}
+                  </Button>
+                </div>
+
+                <Button
+                  variant={cryptoBotEnabled ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    const newValue = !cryptoBotEnabled;
+                    setCryptoBotEnabled(newValue);
+                    togglePaymentMutation.mutate({ key: "PAYMENT_CRYPTOBOT_ENABLED", value: newValue.toString() });
+                  }}
+                  className={cryptoBotEnabled ? "bg-green-500 hover:bg-green-600" : "border-white/20"}
+                >
+                  {cryptoBotEnabled ? "Enabled" : "Disabled"}
+                </Button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold text-white/50 uppercase tracking-widest">CryptoBot API Token</Label>
+                  <div className="flex gap-3">
+                    <Input
+                      type="password"
+                      placeholder="Paste your @CryptoBot API Token (e.g. 1234:AA...)"
+                      className="glass-panel border-white/10 bg-white/5 text-white h-12"
+                      value={cryptoBotToken}
+                      onChange={(e) => setCryptoBotToken(e.target.value)}
+                    />
+                    <Button
+                      onClick={() => cryptoBotTokenMutation.mutate(cryptoBotToken)}
+                      disabled={cryptoBotTokenMutation.isPending}
+                      className="h-12 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 font-bold"
+                    >
+                      {cryptoBotTokenMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-white/40">
+                    Get your API Token from Telegram bot <a href="https://t.me/CryptoBot" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">@CryptoBot</a> (or <a href="https://t.me/CryptoTestnetBot" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">@CryptoTestnetBot</a> for Testnet).
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="h-px bg-white/5" />
+
             {/* Cryptomus Section */}
             <div className="space-y-6">
               <div className="flex items-center justify-between">
