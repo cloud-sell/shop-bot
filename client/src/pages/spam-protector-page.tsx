@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { io } from "socket.io-client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -59,12 +60,36 @@ export default function SpamProtectorPage() {
 
   const { data, isLoading, refetch } = useQuery<SpamStatsResponse>({
     queryKey: ["/api/spam-protector/stats"],
-    refetchInterval: 5000, // Live poll every 5s for real-time tracking
+    refetchInterval: 1500, // Live fast polling every 1.5s for real-time request tracking
+    refetchIntervalInBackground: true,
   });
 
-  const [autoBanEnabled, setAutoBanEnabled] = useState<boolean>(data?.autoBanEnabled ?? true);
-  const [maxReqPerMin, setMaxReqPerMin] = useState<number>(data?.maxReqPerMin ?? 15);
-  const [tempBanDurationMins, setTempBanDurationMins] = useState<number>(data?.tempBanDurationMins ?? 15);
+  const [autoBanEnabled, setAutoBanEnabled] = useState<boolean>(true);
+  const [maxReqPerMin, setMaxReqPerMin] = useState<number>(15);
+  const [tempBanDurationMins, setTempBanDurationMins] = useState<number>(15);
+
+  // Sync state when data loads or updates from backend
+  useEffect(() => {
+    if (data) {
+      setAutoBanEnabled(data.autoBanEnabled);
+      setMaxReqPerMin(data.maxReqPerMin);
+      setTempBanDurationMins(data.tempBanDurationMins);
+    }
+  }, [data?.autoBanEnabled, data?.maxReqPerMin, data?.tempBanDurationMins]);
+
+  // Setup WebSocket real-time updates listener
+  useEffect(() => {
+    const socket = io();
+    socket.on("spam_stats_update", () => {
+      refetch();
+    });
+    socket.on("admin_notification", () => {
+      refetch();
+    });
+    return () => {
+      socket.disconnect();
+    };
+  }, [refetch]);
 
   // Sync state when data loads
   const handleConfigSave = () => {

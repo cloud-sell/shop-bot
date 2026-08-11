@@ -2139,6 +2139,7 @@ app.post("/api/spam-protector/config", isAuth, async (req, res) => {
     if (tempBanDurationMins !== undefined) {
       await storage.updateSetting('SPAM_TEMP_BAN_DURATION_MINS', String(tempBanDurationMins));
     }
+    io.emit('spam_stats_update');
     res.json({ success: true });
   } catch (err) {
     console.error("Anti-Spam config error:", err);
@@ -2165,6 +2166,7 @@ app.post("/api/spam-protector/ban", isAuth, async (req, res) => {
       await storage.updateTelegramUser(id, { isBanned: false, bannedUntil: null });
     }
 
+    io.emit('spam_stats_update');
     res.json({ success: true });
   } catch (err) {
     console.error("Anti-Spam ban action error:", err);
@@ -2545,6 +2547,7 @@ async function processAntiSpamCheck(userId: string, chatId: number, queryId?: st
 
     // Update lastRequestAt timestamp
     await storage.updateTelegramUser(tgUser.id, { lastRequestAt: new Date(now) }).catch(() => {});
+    io.emit('spam_stats_update');
 
     // Fetch Anti-Spam settings
     const autoBanEnabled = (await storage.getSetting('SPAM_AUTO_BAN_ENABLED'))?.value !== 'false';
