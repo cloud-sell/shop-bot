@@ -2549,6 +2549,9 @@ async function processAntiSpamCheck(userId: string, chatId: number, queryId?: st
       const isBlocked = await processAntiSpamCheck(userId, chatId, query.id);
       if (isBlocked) return;
 
+      const tgUser = await storage.getTelegramUser(userId);
+      if (!tgUser) return;
+
       // Start fast countdown on any button interaction
       try {
         const activeOffers = await storage.getActiveSpecialOffers();
@@ -4890,6 +4893,8 @@ async function processAntiSpamCheck(userId: string, chatId: number, queryId?: st
 
       const isBlocked = await processAntiSpamCheck(userId, chatId);
       if (isBlocked) return;
+
+      const tgUser = await storage.getTelegramUser(userId);
 
       // Standardize text comparison by trimming and ignoring case if necessary
       const normalizedText = text?.trim();
