@@ -1,26 +1,25 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { io } from "socket.io-client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import {
-  ShieldAlert,
-  ShieldCheck,
-  Zap,
-  Activity,
-  UserX,
-  Clock,
-  Ban,
-  Save,
-  Loader2,
+import { 
+  ShieldAlert, 
+  ShieldCheck, 
+  Zap, 
+  Activity, 
+  UserX, 
+  RefreshCw, 
+  Save, 
+  Loader2, 
+  Search, 
+  Ban, 
+  Clock, 
   AlertTriangle,
-  RefreshCw,
-  Search,
   CheckCircle2
 } from "lucide-react";
 import {
@@ -29,6 +28,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { io } from "socket.io-client";
 
 interface TrackedUser {
   id: number;
@@ -37,9 +37,9 @@ interface TrackedUser {
   firstName?: string;
   lastName?: string;
   balance: number;
-  isBanned: boolean;
+  isBanned?: boolean;
   bannedUntil?: string;
-  isTempBanned: boolean;
+  isTempBanned?: boolean;
   spamViolations: number;
   lastRequestAt?: string;
   reqPerMin: number;
@@ -67,17 +67,16 @@ export default function SpamProtectorPage() {
   const [autoBanEnabled, setAutoBanEnabled] = useState<boolean>(true);
   const [maxReqPerMin, setMaxReqPerMin] = useState<number>(15);
   const [tempBanDurationMins, setTempBanDurationMins] = useState<number>(15);
-  const [isFormInitialized, setIsFormInitialized] = useState<boolean>(false);
+  const [isUserEditing, setIsUserEditing] = useState<boolean>(false);
 
-  // Initial form state population once data loads
+  // Sync state whenever data arrives from backend (unless user is actively typing)
   useEffect(() => {
-    if (data && !isFormInitialized) {
-      setAutoBanEnabled(data.autoBanEnabled);
-      setMaxReqPerMin(data.maxReqPerMin);
-      setTempBanDurationMins(data.tempBanDurationMins);
-      setIsFormInitialized(true);
+    if (data && !isUserEditing) {
+      setAutoBanEnabled(Boolean(data.autoBanEnabled));
+      setMaxReqPerMin(Number(data.maxReqPerMin) || 15);
+      setTempBanDurationMins(Number(data.tempBanDurationMins) || 15);
     }
-  }, [data, isFormInitialized]);
+  }, [data, isUserEditing]);
 
   // Setup WebSocket real-time updates listener
   useEffect(() => {
@@ -93,7 +92,6 @@ export default function SpamProtectorPage() {
     };
   }, [refetch]);
 
-  // Sync state when data loads
   const handleConfigSave = () => {
     configMutation.mutate({
       autoBanEnabled,
@@ -109,17 +107,25 @@ export default function SpamProtectorPage() {
     },
     onSuccess: (resData) => {
       if (resData) {
-        setAutoBanEnabled(resData.autoBanEnabled);
-        setMaxReqPerMin(resData.maxReqPerMin);
-        setTempBanDurationMins(resData.tempBanDurationMins);
+        setAutoBanEnabled(Boolean(resData.autoBanEnabled));
+        setMaxReqPerMin(Number(resData.maxReqPerMin) || 15);
+        setTempBanDurationMins(Number(resData.tempBanDurationMins) || 15);
       }
+      setIsUserEditing(false);
       queryClient.invalidateQueries({ queryKey: ["/api/spam-protector/stats"] });
       refetch();
       toast({
         title: "Anti-Spam Settings Saved",
-        description: "Rate limiting and auto-ban rules have been updated.",
+        description: "Rate limiting and auto-ban rules have been updated and saved to database.",
       });
     },
+    onError: (error: any) => {
+      toast({
+        title: "Save Failed",
+        description: error.message || "Failed to update anti-spam rules.",
+        variant: "destructive",
+      });
+    }
   });
 
   const banMutation = useMutation({
@@ -143,7 +149,7 @@ export default function SpamProtectorPage() {
     const searchLower = search.toLowerCase();
     const fullName = `${u.firstName || ""} ${u.lastName || ""}`.toLowerCase();
     const username = u.username?.toLowerCase() || "";
-    const telegramId = u.telegramId.toLowerCase();
+    const telegramId = String(u.telegramId || "").toLowerCase();
     return fullName.includes(searchLower) || username.includes(searchLower) || telegramId.includes(searchLower);
   });
 
@@ -247,7 +253,10 @@ export default function SpamProtectorPage() {
               </div>
               <Switch
                 checked={autoBanEnabled}
-                onCheckedChange={setAutoBanEnabled}
+                onCheckedChange={(val) => {
+                  setAutoBanEnabled(val);
+                  setIsUserEditing(true);
+                }}
                 className="data-[state=checked]:bg-emerald-500"
               />
             </div>
@@ -258,9 +267,12 @@ export default function SpamProtectorPage() {
               <Input
                 type="number"
                 min="1"
-                max="100"
+                max="500"
                 value={maxReqPerMin}
-                onChange={(e) => setMaxReqPerMin(parseInt(e.target.value, 10) || 15)}
+                onChange={(e) => {
+                  setMaxReqPerMin(parseInt(e.target.value, 10) || 15);
+                  setIsUserEditing(true);
+                }}
                 className="glass-panel border-white/10 text-white font-bold"
               />
             </div>
@@ -273,7 +285,10 @@ export default function SpamProtectorPage() {
                 min="1"
                 max="1440"
                 value={tempBanDurationMins}
-                onChange={(e) => setTempBanDurationMins(parseInt(e.target.value, 10) || 15)}
+                onChange={(e) => {
+                  setTempBanDurationMins(parseInt(e.target.value, 10) || 15);
+                  setIsUserEditing(true);
+                }}
                 className="glass-panel border-white/10 text-white font-bold"
               />
             </div>
