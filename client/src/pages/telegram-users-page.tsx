@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Save, Loader2, Edit2, Search, Ban, ShieldCheck, ChevronLeft, ChevronRight } from "lucide-react";
+import { Users, Save, Loader2, Edit2, Search, Ban, ShieldCheck, ChevronLeft, ChevronRight, Filter } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface TelegramUser {
@@ -27,6 +27,7 @@ export default function TelegramUsersPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editBalance, setEditBalance] = useState<number>(0);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "banned">("all");
   const [currentPage, setCurrentPage] = useState<number>(1);
 
   const { data: usersData, isLoading, isError, refetch } = useQuery<TelegramUser[]>({
@@ -35,6 +36,9 @@ export default function TelegramUsersPage() {
   });
 
   const users: TelegramUser[] = useMemo(() => Array.isArray(usersData) ? usersData : [], [usersData]);
+
+  const bannedCount = useMemo(() => users.filter(u => Boolean(u?.isBanned)).length, [users]);
+  const activeCount = useMemo(() => users.length - bannedCount, [users, bannedCount]);
 
   const mutation = useMutation({
     mutationFn: async ({ id, balance }: { id: number; balance: number }) => {
@@ -72,24 +76,36 @@ export default function TelegramUsersPage() {
   });
 
   const filteredUsers = useMemo(() => {
+    let result = users;
+
+    // Apply status filter
+    if (statusFilter === "banned") {
+      result = result.filter(u => Boolean(u?.isBanned));
+    } else if (statusFilter === "active") {
+      result = result.filter(u => !u?.isBanned);
+    }
+
+    // Apply search filter
     const searchLower = (search || "").toLowerCase().trim();
-    if (!searchLower) return users;
+    if (searchLower) {
+      result = result.filter((user) => {
+        if (!user) return false;
+        const firstName = String(user.firstName || "");
+        const lastName = String(user.lastName || "");
+        const fullName = `${firstName} ${lastName}`.toLowerCase();
+        const username = String(user.username || "").toLowerCase();
+        const telegramId = String(user.telegramId || "").toLowerCase();
 
-    return users.filter((user) => {
-      if (!user) return false;
-      const firstName = String(user.firstName || "");
-      const lastName = String(user.lastName || "");
-      const fullName = `${firstName} ${lastName}`.toLowerCase();
-      const username = String(user.username || "").toLowerCase();
-      const telegramId = String(user.telegramId || "").toLowerCase();
+        return (
+          fullName.includes(searchLower) ||
+          username.includes(searchLower) ||
+          telegramId.includes(searchLower)
+        );
+      });
+    }
 
-      return (
-        fullName.includes(searchLower) ||
-        username.includes(searchLower) ||
-        telegramId.includes(searchLower)
-      );
-    });
-  }, [users, search]);
+    return result;
+  }, [users, statusFilter, search]);
 
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
   const validCurrentPage = Math.min(currentPage, totalPages);
@@ -101,6 +117,11 @@ export default function TelegramUsersPage() {
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(e.target.value);
+    setCurrentPage(1);
+  };
+
+  const handleFilterChange = (filter: "all" | "active" | "banned") => {
+    setStatusFilter(filter);
     setCurrentPage(1);
   };
 
@@ -132,44 +153,92 @@ export default function TelegramUsersPage() {
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="relative w-full sm:max-w-md">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/20" />
+      {/* Filter Tabs & Search Controls */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+        {/* Status Filter Tabs */}
+        <div className="flex items-center p-1.5 rounded-2xl bg-[#130d24] border border-white/10 gap-1 overflow-x-auto">
+          <button
+            onClick={() => handleFilterChange("all")}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+              statusFilter === "all"
+                ? "bg-purple-600 text-white shadow-lg"
+                : "text-white/50 hover:text-white hover:bg-white/5"
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            All ({users.length})
+          </button>
+
+          <button
+            onClick={() => handleFilterChange("active")}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+              statusFilter === "active"
+                ? "bg-emerald-600 text-white shadow-lg"
+                : "text-white/50 hover:text-white hover:bg-white/5"
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            Active ({activeCount})
+          </button>
+
+          <button
+            onClick={() => handleFilterChange("banned")}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+              statusFilter === "banned"
+                ? "bg-red-600 text-white shadow-lg"
+                : "text-white/50 hover:text-white hover:bg-white/5"
+            }`}
+          >
+            <Ban className="w-3.5 h-3.5 text-red-400" />
+            Banned 🚫 ({bannedCount})
+          </button>
+        </div>
+
+        {/* Search Bar */}
+        <div className="relative w-full md:max-w-md">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
           <Input
-            placeholder="Search by name, @username, or Telegram ID..."
-            className="pl-12 h-12 rounded-2xl border-white/10 bg-[#130d24] text-white placeholder:text-white/30 focus:border-purple-500/50"
+            placeholder="Search name, @username, ID..."
+            className="pl-10 h-11 rounded-2xl border-white/10 bg-[#130d24] text-white text-xs placeholder:text-white/30 focus:border-purple-500/50"
             value={search}
             onChange={handleSearchChange}
           />
         </div>
+      </div>
 
-        {totalPages > 1 && (
-          <div className="flex items-center gap-2 self-end sm:self-auto">
+      {/* Pagination Top controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-white/40 font-medium">
+            Showing {(validCurrentPage - 1) * PAGE_SIZE + 1} - {Math.min(validCurrentPage * PAGE_SIZE, filteredUsers.length)} of {filteredUsers.length} filtered users
+          </span>
+          <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={validCurrentPage === 1}
-              className="h-10 px-3 rounded-xl border-white/10 bg-[#130d24] text-white hover:bg-white/10 disabled:opacity-30"
+              className="h-9 px-3 rounded-xl border-white/10 bg-[#130d24] text-white hover:bg-white/10 disabled:opacity-30 text-xs font-bold"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-4 h-4 mr-1" /> Prev
             </Button>
             <span className="text-xs font-bold text-white/60 px-2">
-              Page {validCurrentPage} of {totalPages}
+              {validCurrentPage} / {totalPages}
             </span>
             <Button
               variant="outline"
               size="sm"
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={validCurrentPage === totalPages}
-              className="h-10 px-3 rounded-xl border-white/10 bg-[#130d24] text-white hover:bg-white/10 disabled:opacity-30"
+              className="h-9 px-3 rounded-xl border-white/10 bg-[#130d24] text-white hover:bg-white/10 disabled:opacity-30 text-xs font-bold"
             >
-              <ChevronRight className="w-4 h-4" />
+              Next <ChevronRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
+      {/* Users Card List */}
       <div className="space-y-3">
         {isLoading ? (
           <div className="flex justify-center py-16">
@@ -188,7 +257,13 @@ export default function TelegramUsersPage() {
           <Card className="border border-white/10 bg-[#130d24]">
             <CardContent className="pt-6">
               <p className="text-center text-white/50 text-sm">
-                {search ? "No users found matching your search" : "No telegram users yet"}
+                {statusFilter === "banned"
+                  ? "No banned users found"
+                  : statusFilter === "active"
+                  ? "No active users found"
+                  : search
+                  ? "No users found matching your search"
+                  : "No telegram users yet"}
               </p>
             </CardContent>
           </Card>
@@ -271,6 +346,7 @@ export default function TelegramUsersPage() {
         )}
       </div>
 
+      {/* Bottom Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between pt-4 border-t border-white/5">
           <span className="text-xs font-medium text-white/40">
@@ -299,6 +375,7 @@ export default function TelegramUsersPage() {
         </div>
       )}
 
+      {/* Edit Balance Modal */}
       <Dialog open={editingId !== null} onOpenChange={(open) => !open && setEditingId(null)}>
         <DialogContent className="border-white/10 bg-[#130d24] text-white rounded-2xl sm:max-w-md">
           <DialogHeader>
