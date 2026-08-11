@@ -3721,6 +3721,23 @@ const setupBotHandlers = (targetBot: TelegramBot) => {
               await targetBot.answerCallbackQuery(query.id, { text: `✅ Payment verified! $${(updatedPayment.amount / 100).toFixed(2)} credited.`, show_alert: true }).catch(() => {});
               await targetBot.sendMessage(chatId, `✅ <b>@CryptoBot Payment Verified!</b>\n\n💰 Credited: <b>$${(updatedPayment.amount / 100).toFixed(2)}</b> has been added to your balance. Thank you! 🤍`, { parse_mode: 'HTML' });
 
+              try {
+                if (query.message) {
+                  const updatedCaption = `<tg-emoji emoji-id="5361543877599724417">🤖</tg-emoji> <b>@CryptoBot Top-up Invoice</b>\n` +
+                    `➖➖➖➖➖➖➖➖➖➖\n` +
+                    `<tg-emoji emoji-id="5370919202796348364">▪️</tg-emoji> Top-up amount: <b>$${(updatedPayment.amount / 100).toFixed(2)} USD</b>\n` +
+                    `<tg-emoji emoji-id="5370919202796348364">▪️</tg-emoji> Status: <tg-emoji emoji-id="6276090299232031662">✅</tg-emoji> <b>Successful</b>\n` +
+                    `➖➖➖➖➖➖➖➖➖➖\n` +
+                    `<b>Payment Verified! Balance updated.</b>`;
+                  await targetBot.editMessageCaption(updatedCaption, {
+                    chat_id: chatId,
+                    message_id: query.message.message_id,
+                    parse_mode: 'HTML',
+                    reply_markup: { inline_keyboard: [] }
+                  }).catch(() => {});
+                }
+              } catch (e) {}
+
               const userDisplayName = tgUser?.firstName || tgUser?.username || "User";
               io.emit('admin_notification', {
                 type: 'deposit',
