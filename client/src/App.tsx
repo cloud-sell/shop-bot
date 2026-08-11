@@ -36,6 +36,8 @@ function PageLoader() {
   );
 }
 
+import { ErrorBoundary } from "@/components/error-boundary";
+
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
 
@@ -49,9 +51,11 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 
   return (
     <LayoutShell>
-      <Suspense fallback={<PageLoader />}>
-        <Component />
-      </Suspense>
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
+          <Component />
+        </Suspense>
+      </ErrorBoundary>
     </LayoutShell>
   );
 }
