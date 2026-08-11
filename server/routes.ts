@@ -2425,6 +2425,82 @@ const setupBotHandlers = (targetBot: TelegramBot) => {
   // Handle interactive features for both bots if they are groups/channels
   // But commands and user profiles are handled by the main bot (bot variable)
   
+async function processCryptomusInvoiceCreation(targetBot: TelegramBot, chatId: number, tgUser: any, amount: number) {
+  const apiKey = (await storage.getSetting('CRYPTOMUS_API_KEY'))?.value;
+  const merchantId = (await storage.getSetting('CRYPTOMUS_MERCHANT_ID'))?.value;
+
+  if (!apiKey || !merchantId) {
+    targetBot.sendMessage(chatId, "❌ Cryptomus is not configured by admin.");
+    return;
+  }
+
+  try {
+    const orderId = crypto.randomBytes(12).toString('hex');
+    const host = process.env.NODE_ENV === 'production'
+      ? 'cloudshopplatform.site'
+      : 'localhost:5000';
+
+    const existingPending = await storage.getPendingPaymentByAmount(tgUser.id, Math.round(amount * 100));
+    if (existingPending) {
+      return targetBot.sendMessage(chatId, `⚠️ You already have a pending $${amount} payment. Please pay that one first or wait for it to expire (1 hour).`);
+    }
+
+    const sign = crypto.createHash('md5').update(Buffer.from(JSON.stringify({
+      amount: amount.toString(),
+      currency: 'USD',
+      order_id: orderId,
+      url_callback: `https://${host}/api/payments/webhook`
+    })).toString('base64') + apiKey).digest('hex');
+
+    const response = await axios.post('https://api.cryptomus.com/v1/payment', {
+      amount: amount.toString(),
+      currency: 'USD',
+      order_id: orderId,
+      url_callback: `https://${host}/api/payments/webhook`
+    }, {
+      headers: {
+        'merchant': merchantId,
+        'sign': sign
+      }
+    });
+
+    if (response.data.result) {
+      const paymentData = response.data.result;
+      const newPayment = await storage.createPayment({
+        telegramUserId: tgUser.id,
+        amount: Math.round(amount * 100),
+        paymentMethod: 'cryptomus',
+        status: 'pending',
+        cryptomusUuid: paymentData.uuid
+      });
+
+      await storage.updateTelegramUser(tgUser.id, { lastAction: null });
+
+      const responseMsg = `<tg-emoji emoji-id="5341506639688126935">💰</tg-emoji> <b>Cryptomus Top-up Invoice</b>\n` +
+        `➖➖➖➖➖➖➖➖➖➖\n` +
+        `<tg-emoji emoji-id="5370919202796348364">▪️</tg-emoji> Top-up amount: <b>$${amount.toFixed(2)} USD</b>\n` +
+        `<tg-emoji emoji-id="5370919202796348364">▪️</tg-emoji> Status: ⏳ <b>Pending</b>\n` +
+        `➖➖➖➖➖➖➖➖➖➖\n` +
+        `Click on the button below to pay via <b>Cryptomus</b>:`;
+
+      targetBot.sendMessage(chatId, responseMsg, {
+        parse_mode: 'HTML',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: 'Go to payment', url: paymentData.url, icon_custom_emoji_id: '5373123633415695601' }],
+            [{ text: 'Check payment', callback_data: `check_payment_${newPayment.id}`, icon_custom_emoji_id: '6010111371251815589' }]
+          ] as any
+        }
+      });
+    } else {
+      throw new Error("Invalid response from Cryptomus");
+    }
+  } catch (err: any) {
+    console.error('Cryptomus creation error:', err.response?.data || err.message);
+    targetBot.sendMessage(chatId, "❌ Failed to create Cryptomus invoice. Please try again later.");
+  }
+}
+
 // Anti-Spam Rate Limiter sliding window (user_id -> timestamps of requests in last 60 seconds)
 const userRequestTimestamps = new Map<string, number[]>();
 
@@ -3679,6 +3755,9 @@ async function processAntiSpamCheck(userId: string, chatId: number, queryId?: st
         const keyboard: any[] = [
           [
             { text: 'CryptoBot', callback_data: 'payment_cryptobot', icon_custom_emoji_id: '5361543877599724417' },
+            { text: 'Cryptomus', callback_data: 'payment_cryptomus', icon_custom_emoji_id: '5341506639688126935' }
+          ],
+          [
             { text: 'Binance Pay', callback_data: 'payment_binance', icon_custom_emoji_id: '6235482598924095547' }
           ]
         ];
@@ -3825,13 +3904,54 @@ async function processAntiSpamCheck(userId: string, chatId: number, queryId?: st
           }
         } catch (err) { }
 
-        const prompt = await targetBot.sendMessage(chatId, `<tg-emoji emoji-id="5296437653770608702">💰</tg-emoji> Enter amount for Cryptomus deposit (USD <tg-emoji emoji-id="5201692367437974073">💵</tg-emoji>):`, {
-          parse_mode: 'HTML'
+        const keyboard: any[][] = [
+          [
+            { text: '1', callback_data: 'cryptomus_amount_1', icon_custom_emoji_id: '5409048419211682843' },
+            { text: '5', callback_data: 'cryptomus_amount_5', icon_custom_emoji_id: '5409048419211682843' },
+            { text: '10', callback_data: 'cryptomus_amount_10', icon_custom_emoji_id: '5409048419211682843' }
+          ],
+          [
+            { text: 'Custom', callback_data: 'cryptomus_amount_custom', icon_custom_emoji_id: '5814427657609153890' }
+          ]
+        ];
+
+        const prompt = await targetBot.sendMessage(chatId, `<tg-emoji emoji-id="5341506639688126935">💰</tg-emoji> Enter amount for <b>Cryptomus</b> deposit in USD (<tg-emoji emoji-id="5201692367437974073">💵</tg-emoji>):`, {
+          parse_mode: 'HTML',
+          reply_markup: { inline_keyboard: keyboard }
         });
         await storage.updateTelegramUserByChatId(chatId.toString(), {
-          lastAction: 'awaiting_cryptomus_amount',
+          lastAction: 'awaiting_cryptomus_amount_selection',
           lastMessageId: prompt?.message_id
         });
+        return;
+      }
+
+      if (data.startsWith('cryptomus_amount_')) {
+        const val = data.replace('cryptomus_amount_', '');
+        if (val === 'custom') {
+          try {
+            if (query.message) {
+              await targetBot.deleteMessage(chatId, query.message.message_id);
+            }
+          } catch (e) { }
+          const prompt = await targetBot.sendMessage(chatId, `<tg-emoji emoji-id="5341506639688126935">💰</tg-emoji> Enter custom amount for <b>Cryptomus</b> deposit in USD (<tg-emoji emoji-id="5201692367437974073">💵</tg-emoji>):`, { parse_mode: 'HTML' });
+          await storage.updateTelegramUserByChatId(chatId.toString(), {
+            lastAction: 'awaiting_cryptomus_amount',
+            lastMessageId: prompt?.message_id
+          });
+          return;
+        }
+
+        const amount = parseFloat(val);
+        if (isNaN(amount) || amount <= 0) return;
+
+        try {
+          if (query.message) {
+            await targetBot.deleteMessage(chatId, query.message.message_id);
+          }
+        } catch (e) { }
+
+        await processCryptomusInvoiceCreation(targetBot, chatId, tgUser, amount);
         return;
       }
 
@@ -4111,16 +4231,49 @@ async function processAntiSpamCheck(userId: string, chatId: number, queryId?: st
                 const status = response.data.result.status;
                 if (status === 'paid' || status === 'paid_over') {
                   if (checkingMsg) await targetBot.deleteMessage(chatId, checkingMsg.message_id).catch(() => { });
-                  
-                  await db.transaction(async (tx) => {
-                    const [u] = await tx.select().from(telegramUsers).where(eq(telegramUsers.id, tgUser.id)).for('update');
-                    if (u) {
-                      await tx.update(telegramUsers).set({ balance: u.balance + payment.amount }).where(eq(telegramUsers.id, u.id));
-                    }
-                    await tx.update(payments).set({ status: 'completed', updatedAt: new Date() }).where(eq(payments.id, payment.id));
-                  });
 
-                  await targetBot.sendMessage(chatId, `✅ Cryptomus payment verified! $${(payment.amount / 100).toFixed(2)} has been added to your balance.`);
+                  // ATOMIC DB UPDATE TO PREVENT DOUBLE CREDITING
+                  const [updatedPayment] = await db.update(payments)
+                    .set({ status: 'completed', updatedAt: new Date() })
+                    .where(and(eq(payments.id, payment.id), ne(payments.status, 'completed')))
+                    .returning();
+
+                  if (updatedPayment) {
+                    await db.execute(sql`UPDATE telegram_users SET balance = balance + ${updatedPayment.amount} WHERE id = ${updatedPayment.telegramUserId}`);
+                    await targetBot.sendMessage(chatId, `✅ <b>Cryptomus Payment Verified!</b>\n\n💰 Credited: <b>$${(updatedPayment.amount / 100).toFixed(2)}</b> has been added to your balance. Thank you! 🤍`, { parse_mode: 'HTML' });
+
+                    try {
+                      if (query.message) {
+                        const updatedText = `<tg-emoji emoji-id="5341506639688126935">💰</tg-emoji> <b>Cryptomus Top-up Invoice</b>\n` +
+                          `➖➖➖➖➖➖➖➖➖➖\n` +
+                          `<tg-emoji emoji-id="5370919202796348364">▪️</tg-emoji> Top-up amount: <b>$${(updatedPayment.amount / 100).toFixed(2)} USD</b>\n` +
+                          `<tg-emoji emoji-id="5370919202796348364">▪️</tg-emoji> Status: <tg-emoji emoji-id="6276090299232031662">✅</tg-emoji> <b>Successful</b>\n` +
+                          `➖➖➖➖➖➖➖➖➖➖\n` +
+                          `<b>Payment Verified! Balance updated.</b>`;
+                        await targetBot.editMessageText(updatedText, {
+                          chat_id: chatId,
+                          message_id: query.message.message_id,
+                          parse_mode: 'HTML',
+                          reply_markup: { inline_keyboard: [] }
+                        }).catch(() => {});
+                      }
+                    } catch (e) {}
+
+                    const userDisplayName = tgUser?.firstName || tgUser?.username || "User";
+                    io.emit('admin_notification', {
+                      type: 'deposit',
+                      title: 'New Cryptomus Deposit',
+                      message: `${userDisplayName} deposited $${(updatedPayment.amount / 100).toFixed(2)} via Cryptomus`,
+                      data: { paymentId: updatedPayment.id, userId: tgUser?.telegramId, amount: updatedPayment.amount / 100, txId: payment.cryptomusUuid }
+                    });
+
+                    sendAdminPushNotification(
+                      'New Cryptomus Deposit',
+                      `${userDisplayName} deposited $${(updatedPayment.amount / 100).toFixed(2)}`
+                    ).catch(console.error);
+                  } else {
+                    await targetBot.sendMessage(chatId, "⚠️ This payment has already been verified and credited to your account.");
+                  }
                 } else if (status === 'process') {
                   await storage.updatePayment(payment.id, { status: 'pending' });
                   if (checkingMsg) await targetBot.deleteMessage(chatId, checkingMsg.message_id).catch(() => { });
@@ -5408,82 +5561,7 @@ async function processAntiSpamCheck(userId: string, chatId: number, queryId?: st
           return;
         }
 
-        const apiKey = (await storage.getSetting('CRYPTOMUS_API_KEY'))?.value;
-        const merchantId = (await storage.getSetting('CRYPTOMUS_MERCHANT_ID'))?.value;
-
-        if (!apiKey || !merchantId) {
-          targetBot.sendMessage(chatId, "❌ Cryptomus is not configured by admin.");
-          return;
-        }
-
-        try {
-          const orderId = crypto.randomBytes(12).toString('hex');
-          const host = process.env.NODE_ENV === 'production'
-            ? 'cloudshopplatform.site'
-            : 'localhost:5000';
-
-          // Amount Locking: Check for existing pending payment with same amount
-          const existingPending = await storage.getPendingPaymentByAmount(tgUser.id, Math.round(amount * 100));
-          if (existingPending) {
-            return targetBot.sendMessage(chatId, `⚠️ You already have a pending $${amount} payment. Please pay that one first or wait for it to expire (1 hour).`);
-          }
-
-          const sign = crypto.createHash('md5').update(Buffer.from(JSON.stringify({
-            amount: amount.toString(),
-            currency: 'USD',
-            order_id: orderId,
-            url_callback: `https://${host}/api/payments/webhook`
-          })).toString('base64') + apiKey).digest('hex');
-
-          const response = await axios.post('https://api.cryptomus.com/v1/payment', {
-            amount: amount.toString(),
-            currency: 'USD',
-            order_id: orderId,
-            url_callback: `https://${host}/api/payments/webhook`
-          }, {
-            headers: {
-              'merchant': merchantId,
-              'sign': sign
-            }
-          });
-
-          if (response.data.result) {
-            const paymentData = response.data.result;
-            const newPayment = await storage.createPayment({
-              telegramUserId: tgUser.id,
-              amount: Math.round(amount * 100),
-              paymentMethod: 'cryptomus',
-              status: 'pending',
-              cryptomusUuid: paymentData.uuid
-            });
-
-            await storage.updateTelegramUser(tgUser.id, { lastAction: null });
-
-            const responseMsg = `💰 Top-up: Cryptomus\n` +
-              `➖➖➖➖➖➖➖➖➖➖\n` +
-              `▪️ To recharge, click on the button below \n` +
-              `Go to payment and pay the invoice issued to you\n` +
-              `▪️ You have 5 hours to pay your bill\n` +
-              `▪️ Top-up amount: ${amount}$\n` +
-              `➖➖➖➖➖➖➖➖➖➖\n` +
-              `⚠️ After payment, click on Check payment`;
-
-            targetBot.sendMessage(chatId, responseMsg, {
-              parse_mode: 'Markdown',
-              reply_markup: {
-                inline_keyboard: [
-                  [{ text: 'Go to payment', url: paymentData.url, icon_custom_emoji_id: '5373123633415695601' }],
-                  [{ text: 'Check payment', callback_data: `check_payment_${newPayment.id}`, icon_custom_emoji_id: '6010111371251815589' }]
-                ] as any
-              }
-            });
-          } else {
-            throw new Error("Invalid response from Cryptomus");
-          }
-        } catch (err) {
-          console.error('Cryptomus creation error:', err);
-          targetBot.sendMessage(chatId, "❌ Failed to create Cryptomus invoice. Please try again later.");
-        }
+        await processCryptomusInvoiceCreation(targetBot, chatId, tgUser, amount);
       } else if (tgUser?.lastAction === 'awaiting_binance_deposit_amount') {
         const amount = parseFloat(normalizedText || "0");
 
