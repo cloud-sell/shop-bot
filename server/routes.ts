@@ -3456,22 +3456,13 @@ const setupBotHandlers = (targetBot: TelegramBot) => {
         } catch (err) { }
 
         const binanceEnabled = (await storage.getSetting('PAYMENT_BINANCE_ENABLED'))?.value !== 'false';
-        const cryptomusEnabled = (await storage.getSetting('PAYMENT_CRYPTOMUS_ENABLED'))?.value !== 'false';
         const cryptobotEnabled = (await storage.getSetting('PAYMENT_CRYPTOBOT_ENABLED'))?.value !== 'false';
-        const trc20Enabled = (await storage.getSetting('PAYMENT_TRC20_ENABLED'))?.value === 'true';
-        const aptosEnabled = (await storage.getSetting('PAYMENT_APTOS_ENABLED'))?.value === 'true';
 
         const keyboard: any[] = [];
         const row1: any[] = [];
         if (cryptobotEnabled) row1.push({ text: '🤖 @CryptoBot', callback_data: 'payment_cryptobot', icon_custom_emoji_id: '5377620962390857342' });
         if (binanceEnabled) row1.push({ text: 'Binance Pay', callback_data: 'payment_binance', icon_custom_emoji_id: '6235482598924095547' });
-        if (cryptomusEnabled) row1.push({ text: '🔐 Cryptomus', callback_data: 'payment_cryptomus' });
         if (row1.length > 0) keyboard.push(row1);
-
-        const row2: any[] = [];
-        if (trc20Enabled) row2.push({ text: 'TRC20 (USDT)', callback_data: 'payment_trc20', icon_custom_emoji_id: '5377620962390857342' });
-        if (aptosEnabled) row2.push({ text: 'Aptos (USDT)', callback_data: 'payment_aptos', icon_custom_emoji_id: '5798849051017352095' });
-        if (row2.length > 0) keyboard.push(row2);
 
         if (keyboard.length === 0) {
           await targetBot.sendMessage(chatId, "⚠️ Sorry, no payment methods are currently available. Please contact support.");
