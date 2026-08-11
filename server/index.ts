@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
@@ -64,17 +65,21 @@ app.use((req, res, next) => {
 
 async function startServer() {
   try {
+    console.log("[SERVER] Registering routes...");
     await registerRoutes(httpServer, app, io);
     
     // Initialize Admin and Database Tables
+    console.log("[SERVER] Initializing admin...");
     const { storage } = await import("./storage");
     await storage.initializeAdmin();
 
     // Start AWS Background Sync
+    console.log("[SERVER] Starting AWS sync...");
     const { startAwsBackgroundSync } = await import("./aws-service");
     startAwsBackgroundSync();
 
     // Init VAPID Push Notifications
+    console.log("[SERVER] Initializing push notifications...");
     const { initPushNotifications } = await import("./push-notifications");
     await initPushNotifications();
 
@@ -87,14 +92,8 @@ async function startServer() {
       }
     });
 
-    if (process.env.NODE_ENV === "production") {
-      serveStatic(app);
-    } else {
-      const { setupVite } = await import("./vite");
-      await setupVite(httpServer, app);
-    }
-
     const port = parseInt(process.env.PORT || "5000", 10);
+    console.log(`[SERVER] Attempting to listen on port ${port}...`);
     httpServer.listen(
       {
         port,
@@ -102,10 +101,21 @@ async function startServer() {
       },
       () => {
         log(`Server started: Port ${port}`);
+        console.log(`✅ Server successfully listening on http://0.0.0.0:${port}`);
       },
     );
+
+    if (process.env.NODE_ENV === "production") {
+      console.log("[SERVER] Serving static assets...");
+      serveStatic(app);
+    } else {
+      console.log("[SERVER] Setting up Vite dev server...");
+      const { setupVite } = await import("./vite");
+      await setupVite(httpServer, app);
+    }
   } catch (error) {
     log(`Failed to start server: ${error}`);
+    console.error("❌ Failed to start server:", error);
     process.exit(1);
   }
 }

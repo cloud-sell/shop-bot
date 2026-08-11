@@ -3483,7 +3483,7 @@ const setupBotHandlers = (targetBot: TelegramBot) => {
           }
         } catch (err) { }
 
-        const prompt = await targetBot.sendMessage(chatId, `<tg-emoji emoji-id="5296437653770608702">💰</tg-emoji> Enter amount for <b>@CryptoBot</b> deposit in USD (<tg-emoji emoji-id="5201692367437974073">💵</tg-emoji>):`, {
+        const prompt = await targetBot.sendMessage(chatId, `<tg-emoji emoji-id="5361543877599724417">🤖</tg-emoji> Enter amount for <b>@CryptoBot</b> deposit in USD (<tg-emoji emoji-id="5201692367437974073">💵</tg-emoji>):`, {
           parse_mode: 'HTML'
         });
         await storage.updateTelegramUserByChatId(chatId.toString(), {
@@ -4971,22 +4971,36 @@ const setupBotHandlers = (targetBot: TelegramBot) => {
           if (res.invoiceId) {
             await storage.updatePayment(newPayment.id, { externalId: res.invoiceId.toString() });
           }
-          const msgText = `🤖 <b>@CryptoBot Top-up Invoice</b>\n` +
+          const msgText = `<tg-emoji emoji-id="5361543877599724417">🤖</tg-emoji> <b>@CryptoBot Top-up Invoice</b>\n` +
             `➖➖➖➖➖➖➖➖➖➖\n` +
             `▪️ Top-up amount: <b>$${amount.toFixed(2)} USD</b>\n` +
-            `▪️ Status: ⏳ Pending\n` +
+            `▪️ Status: <tg-emoji emoji-id="6010111371251815589">⏳</tg-emoji> Pending\n` +
             `➖➖➖➖➖➖➖➖➖➖\n` +
             `Click on the button below to pay via <b>@CryptoBot</b>:`;
 
-          targetBot.sendMessage(chatId, msgText, {
-            parse_mode: 'HTML',
-            reply_markup: {
-              inline_keyboard: [
-                [{ text: `💳 Pay $${amount.toFixed(2)} via @CryptoBot`, url: res.payUrl }],
-                [{ text: '🔄 Refresh Balance', callback_data: 'check_balance' }]
-              ]
-            }
-          });
+          const keyboard: any[][] = [
+            [{ text: `Pay $${amount.toFixed(2)} via @CryptoBot`, url: res.payUrl, icon_custom_emoji_id: '5361543877599724417' }],
+            [{ text: 'Refresh Balance', callback_data: 'check_balance', icon_custom_emoji_id: '6010111371251815589' }]
+          ];
+
+          const imagePath = path.resolve(process.cwd(), 'public/assets/cryptobot.png');
+          try {
+            await sendPhotoWithCache(targetBot, chatId, imagePath, 'FILE_ID_CRYPTOBOT', {
+              caption: msgText,
+              parse_mode: 'HTML',
+              reply_markup: {
+                inline_keyboard: keyboard
+              }
+            });
+          } catch (photoErr) {
+            console.error("Failed to send CryptoBot photo:", photoErr);
+            await targetBot.sendMessage(chatId, msgText, {
+              parse_mode: 'HTML',
+              reply_markup: {
+                inline_keyboard: keyboard
+              }
+            });
+          }
         } else {
           targetBot.sendMessage(chatId, `❌ Failed to create @CryptoBot invoice: ${res.error || 'Please check admin settings'}`);
         }
