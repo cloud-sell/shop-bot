@@ -107,8 +107,14 @@ export default function SpamProtectorPage() {
       const res = await apiRequest("POST", "/api/spam-protector/config", config);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (resData) => {
+      if (resData) {
+        setAutoBanEnabled(resData.autoBanEnabled);
+        setMaxReqPerMin(resData.maxReqPerMin);
+        setTempBanDurationMins(resData.tempBanDurationMins);
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/spam-protector/stats"] });
+      refetch();
       toast({
         title: "Anti-Spam Settings Saved",
         description: "Rate limiting and auto-ban rules have been updated.",
@@ -123,6 +129,8 @@ export default function SpamProtectorPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/spam-protector/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/telegram-users"] });
+      refetch();
       toast({
         title: "Ban Status Updated",
         description: "User restriction status updated successfully.",

@@ -2133,14 +2133,19 @@ app.post("/api/spam-protector/config", isAuth, async (req, res) => {
     if (typeof autoBanEnabled === 'boolean') {
       await storage.updateSetting('SPAM_AUTO_BAN_ENABLED', String(autoBanEnabled));
     }
-    if (maxReqPerMin !== undefined) {
+    if (maxReqPerMin !== undefined && maxReqPerMin !== null) {
       await storage.updateSetting('SPAM_MAX_REQ_PER_MIN', String(maxReqPerMin));
     }
-    if (tempBanDurationMins !== undefined) {
+    if (tempBanDurationMins !== undefined && tempBanDurationMins !== null) {
       await storage.updateSetting('SPAM_TEMP_BAN_DURATION_MINS', String(tempBanDurationMins));
     }
     io.emit('spam_stats_update');
-    res.json({ success: true });
+    res.json({
+      success: true,
+      autoBanEnabled: typeof autoBanEnabled === 'boolean' ? autoBanEnabled : true,
+      maxReqPerMin: maxReqPerMin ? parseInt(String(maxReqPerMin), 10) : 15,
+      tempBanDurationMins: tempBanDurationMins ? parseInt(String(tempBanDurationMins), 10) : 15
+    });
   } catch (err) {
     console.error("Anti-Spam config error:", err);
     res.status(500).json({ message: "Internal server error" });
@@ -2155,11 +2160,11 @@ app.post("/api/spam-protector/ban", isAuth, async (req, res) => {
 
     const now = Date.now();
     if (action === 'temp_15m') {
-      await storage.updateTelegramUser(id, { bannedUntil: new Date(now + 15 * 60 * 1000) });
+      await storage.updateTelegramUser(id, { isBanned: false, bannedUntil: new Date(now + 15 * 60 * 1000) });
     } else if (action === 'temp_1h') {
-      await storage.updateTelegramUser(id, { bannedUntil: new Date(now + 60 * 60 * 1000) });
+      await storage.updateTelegramUser(id, { isBanned: false, bannedUntil: new Date(now + 60 * 60 * 1000) });
     } else if (action === 'temp_24h') {
-      await storage.updateTelegramUser(id, { bannedUntil: new Date(now + 24 * 60 * 60 * 1000) });
+      await storage.updateTelegramUser(id, { isBanned: false, bannedUntil: new Date(now + 24 * 60 * 60 * 1000) });
     } else if (action === 'perm_ban') {
       await storage.updateTelegramUser(id, { isBanned: true, bannedUntil: null });
     } else if (action === 'unban') {
