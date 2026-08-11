@@ -336,6 +336,7 @@ async function createCryptoBotInvoice(
     const invoiceBody: any = {
       asset: 'USDT',
       amount: amountUsd.toFixed(2),
+      accepted_assets: 'USDT,BTC,ETH,TON,BNB,TRX',
       payload: payloadStr,
       description: `Deposit $${amountUsd.toFixed(2)} to ShopBot`
     };
@@ -3822,6 +3823,7 @@ const setupBotHandlers = (targetBot: TelegramBot) => {
             const check = await checkCryptoBotInvoiceStatus(payment.externalId);
             if (check.paid) {
               if (checkingMsg) await targetBot.deleteMessage(chatId, checkingMsg.message_id).catch(() => { });
+              await targetBot.answerCallbackQuery(query.id, { text: "Payment verified! Balance updated.", show_alert: true }).catch(() => {});
 
               // ATOMIC DB UPDATE TO PREVENT DOUBLE CREDITING
               const [updatedPayment] = await db.update(payments)
@@ -3851,14 +3853,7 @@ const setupBotHandlers = (targetBot: TelegramBot) => {
             } else {
               await storage.updatePayment(payment.id, { status: 'pending' });
               if (checkingMsg) await targetBot.deleteMessage(chatId, checkingMsg.message_id).catch(() => { });
-              const failMsg = `<tg-emoji emoji-id="6298544405435387645">❌</tg-emoji> <b>@CryptoBot Payment Not Detected Yet.</b>\n\nPlease make sure you completed the payment on @CryptoBot before clicking check.`;
-              const sentMsg = await targetBot.sendMessage(chatId, failMsg, { parse_mode: 'HTML' });
-              if (sentMsg) {
-                await storage.updateTelegramUser(tgUser.id, { lastErrorMessageId: sentMsg.message_id });
-                setTimeout(() => {
-                  targetBot.deleteMessage(chatId, sentMsg.message_id).catch(() => { });
-                }, 15000);
-              }
+              await targetBot.answerCallbackQuery(query.id, { text: "Payment not found yet.", show_alert: true }).catch(() => {});
             }
           } else if (payment.paymentMethod === 'trc20') {
             const walletAddress = (await storage.getSetting('TRC20_WALLET_ADDRESS'))?.value;
@@ -5063,7 +5058,7 @@ const setupBotHandlers = (targetBot: TelegramBot) => {
 
           const keyboard: any[][] = [
             [{ text: `Pay $${amount.toFixed(2)} via @CryptoBot`, url: res.payUrl, icon_custom_emoji_id: '5361543877599724417' }],
-            [{ text: 'Refresh Balance', callback_data: 'check_balance', icon_custom_emoji_id: '6010111371251815589' }]
+            [{ text: 'Check top-up', callback_data: `check_payment_${newPayment.id}`, icon_custom_emoji_id: '6010111371251815589' }]
           ];
 
           const imagePath = path.resolve(process.cwd(), 'public/assets/cryptobot.png');
