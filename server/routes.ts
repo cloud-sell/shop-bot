@@ -2356,12 +2356,14 @@ const setupBotHandlers = (targetBot: TelegramBot) => {
         return;
       }
 
-      // 1. Immediately answer the callback query to clear client spinner
-      try {
-        console.log(`[Bot Callback] Answering callback query: ${callbackId}`);
-        await targetBot.answerCallbackQuery(query.id);
-      } catch (err: any) {
-        console.error(`[Bot Callback] Failed to answer callback query:`, err.message);
+      // 1. Immediately answer the callback query to clear client spinner (except for check_payment_ where custom modal alert popup is shown)
+      if (!data.startsWith('check_payment_')) {
+        try {
+          console.log(`[Bot Callback] Answering callback query: ${callbackId}`);
+          await targetBot.answerCallbackQuery(query.id);
+        } catch (err: any) {
+          console.error(`[Bot Callback] Failed to answer callback query:`, err.message);
+        }
       }
 
       // Only handle actions on the main bot
