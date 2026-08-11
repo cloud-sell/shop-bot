@@ -3696,9 +3696,9 @@ async function processAntiSpamCheck(userId: string, chatId: number, queryId?: st
 
         const keyboard: any[][] = [
           [
-            { text: '$1', callback_data: 'cryptobot_amount_1', icon_custom_emoji_id: '5409048419211682843' },
-            { text: '$5', callback_data: 'cryptobot_amount_5', icon_custom_emoji_id: '5409048419211682843' },
-            { text: '$10', callback_data: 'cryptobot_amount_10', icon_custom_emoji_id: '5409048419211682843' }
+            { text: '1', callback_data: 'cryptobot_amount_1', icon_custom_emoji_id: '5409048419211682843' },
+            { text: '5', callback_data: 'cryptobot_amount_5', icon_custom_emoji_id: '5409048419211682843' },
+            { text: '10', callback_data: 'cryptobot_amount_10', icon_custom_emoji_id: '5409048419211682843' }
           ],
           [
             { text: 'Custom', callback_data: 'cryptobot_amount_custom', icon_custom_emoji_id: '5814427657609153890' }
