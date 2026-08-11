@@ -4958,12 +4958,34 @@ async function processAntiSpamCheck(userId: string, chatId: number, queryId?: st
         const categories = Array.from(new Set(availableProducts.map(p => p.type as string)));
         const keyboard = categories.map(cat => {
           let btnText = cat;
+          let iconEmojiId: string | undefined = undefined;
           const catLower = cat.toLowerCase();
-          if (catLower.includes('aws')) btnText = '☁️ AWS';
-          else if (catLower.includes('digital ocean') || catLower.includes('digitalocean')) btnText = '💧 Digital Ocean';
-          else if (catLower.includes('azure')) btnText = '☁️ Azure';
-          else if (catLower.includes('kamatera')) btnText = '☁️ Kamatera';
-          return [{ text: btnText, callback_data: `cat_${cat}` }];
+
+          if (catLower.includes('digital ocean') || catLower.includes('digitalocean')) {
+            btnText = 'Digital Ocean';
+            iconEmojiId = '5785345544989710932';
+          } else if (catLower.includes('aws')) {
+            btnText = 'AWS';
+            iconEmojiId = '5785025630055700143';
+          } else if (catLower.includes('linode')) {
+            btnText = 'Linode';
+            iconEmojiId = '5787285044846399857';
+          } else if (catLower.includes('azure')) {
+            btnText = 'Azure';
+            iconEmojiId = '5785185643357279341';
+          } else if (catLower.includes('gcp') || catLower.includes('google cloud')) {
+            btnText = 'GCP';
+            iconEmojiId = '5785061312643994750';
+          } else if (catLower.includes('kamatera')) {
+            btnText = 'Kamatera';
+            iconEmojiId = '5785070770161980265';
+          }
+
+          const btnObj: any = { text: btnText, callback_data: `cat_${cat}` };
+          if (iconEmojiId) {
+            btnObj.icon_custom_emoji_id = iconEmojiId;
+          }
+          return [btnObj];
         });
         const botInstance = targetBot;
         if (botInstance) {
