@@ -3455,19 +3455,12 @@ const setupBotHandlers = (targetBot: TelegramBot) => {
           }
         } catch (err) { }
 
-        const binanceEnabled = (await storage.getSetting('PAYMENT_BINANCE_ENABLED'))?.value !== 'false';
-        const cryptobotEnabled = (await storage.getSetting('PAYMENT_CRYPTOBOT_ENABLED'))?.value !== 'false';
-
-        const keyboard: any[] = [];
-        const row1: any[] = [];
-        if (cryptobotEnabled) row1.push({ text: 'CryptoBot', callback_data: 'payment_cryptobot', icon_custom_emoji_id: '5361543877599724417' });
-        if (binanceEnabled) row1.push({ text: 'Binance Pay', callback_data: 'payment_binance', icon_custom_emoji_id: '6235482598924095547' });
-        if (row1.length > 0) keyboard.push(row1);
-
-        if (keyboard.length === 0) {
-          await targetBot.sendMessage(chatId, "⚠️ Sorry, no payment methods are currently available. Please contact support.");
-          return;
-        }
+        const keyboard: any[] = [
+          [
+            { text: 'CryptoBot', callback_data: 'payment_cryptobot', icon_custom_emoji_id: '5361543877599724417' },
+            { text: 'Binance Pay', callback_data: 'payment_binance', icon_custom_emoji_id: '6235482598924095547' }
+          ]
+        ];
 
         await targetBot.sendMessage(chatId, `<tg-emoji emoji-id="5201692367437974073">💰</tg-emoji> <b>Select Payment Method:</b>`, {
           parse_mode: 'HTML',
