@@ -2130,21 +2130,30 @@ app.get("/api/spam-protector/stats", isAuth, async (req, res) => {
 app.post("/api/spam-protector/config", isAuth, async (req, res) => {
   try {
     const { autoBanEnabled, maxReqPerMin, tempBanDurationMins } = req.body;
+    const maxReq = parseInt(String(maxReqPerMin), 10);
+    const tempMins = parseInt(String(tempBanDurationMins), 10);
+
     if (typeof autoBanEnabled === 'boolean') {
       await storage.updateSetting('SPAM_AUTO_BAN_ENABLED', String(autoBanEnabled));
     }
-    if (maxReqPerMin !== undefined && maxReqPerMin !== null) {
-      await storage.updateSetting('SPAM_MAX_REQ_PER_MIN', String(maxReqPerMin));
+    if (!isNaN(maxReq) && maxReq > 0) {
+      await storage.updateSetting('SPAM_MAX_REQ_PER_MIN', String(maxReq));
     }
-    if (tempBanDurationMins !== undefined && tempBanDurationMins !== null) {
-      await storage.updateSetting('SPAM_TEMP_BAN_DURATION_MINS', String(tempBanDurationMins));
+    if (!isNaN(tempMins) && tempMins > 0) {
+      await storage.updateSetting('SPAM_TEMP_BAN_DURATION_MINS', String(tempMins));
     }
+
     io.emit('spam_stats_update');
+
+    const confirmedAutoBan = (await storage.getSetting('SPAM_AUTO_BAN_ENABLED'))?.value !== 'false';
+    const confirmedMaxReq = parseInt((await storage.getSetting('SPAM_MAX_REQ_PER_MIN'))?.value || '15', 10);
+    const confirmedTempMins = parseInt((await storage.getSetting('SPAM_TEMP_BAN_DURATION_MINS'))?.value || '15', 10);
+
     res.json({
       success: true,
-      autoBanEnabled: typeof autoBanEnabled === 'boolean' ? autoBanEnabled : true,
-      maxReqPerMin: maxReqPerMin ? parseInt(String(maxReqPerMin), 10) : 15,
-      tempBanDurationMins: tempBanDurationMins ? parseInt(String(tempBanDurationMins), 10) : 15
+      autoBanEnabled: confirmedAutoBan,
+      maxReqPerMin: confirmedMaxReq,
+      tempBanDurationMins: confirmedTempMins
     });
   } catch (err) {
     console.error("Anti-Spam config error:", err);

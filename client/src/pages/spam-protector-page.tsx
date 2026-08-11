@@ -65,16 +65,16 @@ export default function SpamProtectorPage() {
   });
 
   const [autoBanEnabled, setAutoBanEnabled] = useState<boolean>(true);
-  const [maxReqPerMin, setMaxReqPerMin] = useState<number>(15);
-  const [tempBanDurationMins, setTempBanDurationMins] = useState<number>(15);
+  const [maxReqInput, setMaxReqInput] = useState<string>("15");
+  const [tempBanInput, setTempBanInput] = useState<string>("15");
   const [isUserEditing, setIsUserEditing] = useState<boolean>(false);
 
-  // Sync state whenever data arrives from backend (unless user is actively typing)
+  // Sync state whenever fresh data arrives from backend (if user is not actively typing)
   useEffect(() => {
     if (data && !isUserEditing) {
       setAutoBanEnabled(Boolean(data.autoBanEnabled));
-      setMaxReqPerMin(Number(data.maxReqPerMin) || 15);
-      setTempBanDurationMins(Number(data.tempBanDurationMins) || 15);
+      setMaxReqInput(String(data.maxReqPerMin ?? 15));
+      setTempBanInput(String(data.tempBanDurationMins ?? 15));
     }
   }, [data, isUserEditing]);
 
@@ -93,10 +93,22 @@ export default function SpamProtectorPage() {
   }, [refetch]);
 
   const handleConfigSave = () => {
+    const maxReqNum = parseInt(maxReqInput, 10);
+    const tempMinsNum = parseInt(tempBanInput, 10);
+
+    if (isNaN(maxReqNum) || maxReqNum <= 0) {
+      toast({ title: "Invalid Input", description: "Max requests per minute must be a positive number.", variant: "destructive" });
+      return;
+    }
+    if (isNaN(tempMinsNum) || tempMinsNum <= 0) {
+      toast({ title: "Invalid Input", description: "Penalty duration must be a positive number.", variant: "destructive" });
+      return;
+    }
+
     configMutation.mutate({
       autoBanEnabled,
-      maxReqPerMin,
-      tempBanDurationMins,
+      maxReqPerMin: maxReqNum,
+      tempBanDurationMins: tempMinsNum,
     });
   };
 
@@ -108,15 +120,15 @@ export default function SpamProtectorPage() {
     onSuccess: (resData) => {
       if (resData) {
         setAutoBanEnabled(Boolean(resData.autoBanEnabled));
-        setMaxReqPerMin(Number(resData.maxReqPerMin) || 15);
-        setTempBanDurationMins(Number(resData.tempBanDurationMins) || 15);
+        setMaxReqInput(String(resData.maxReqPerMin));
+        setTempBanInput(String(resData.tempBanDurationMins));
       }
       setIsUserEditing(false);
       queryClient.invalidateQueries({ queryKey: ["/api/spam-protector/stats"] });
       refetch();
       toast({
         title: "Anti-Spam Settings Saved",
-        description: "Rate limiting and auto-ban rules have been updated and saved to database.",
+        description: "Rate limiting and auto-ban rules have been saved to database.",
       });
     },
     onError: (error: any) => {
@@ -268,9 +280,9 @@ export default function SpamProtectorPage() {
                 type="number"
                 min="1"
                 max="500"
-                value={maxReqPerMin}
+                value={maxReqInput}
                 onChange={(e) => {
-                  setMaxReqPerMin(parseInt(e.target.value, 10) || 15);
+                  setMaxReqInput(e.target.value);
                   setIsUserEditing(true);
                 }}
                 className="glass-panel border-white/10 text-white font-bold"
@@ -284,9 +296,9 @@ export default function SpamProtectorPage() {
                 type="number"
                 min="1"
                 max="1440"
-                value={tempBanDurationMins}
+                value={tempBanInput}
                 onChange={(e) => {
-                  setTempBanDurationMins(parseInt(e.target.value, 10) || 15);
+                  setTempBanInput(e.target.value);
                   setIsUserEditing(true);
                 }}
                 className="glass-panel border-white/10 text-white font-bold"
@@ -339,8 +351,9 @@ export default function SpamProtectorPage() {
               <p className="text-center text-white/40 py-8">No user activity recorded yet.</p>
             ) : (
               filteredUsers.map((user) => {
-                const isHighRisk = user.reqPerMin >= (data?.maxReqPerMin ?? 15) * 0.7;
-                const isViolation = user.reqPerMin > (data?.maxReqPerMin ?? 15);
+                const maxLimit = data?.maxReqPerMin ?? 15;
+                const isHighRisk = user.reqPerMin >= maxLimit * 0.7;
+                const isViolation = user.reqPerMin > maxLimit;
 
                 return (
                   <div
@@ -408,7 +421,7 @@ export default function SpamProtectorPage() {
                         <p className="text-xs text-white/40 font-bold uppercase">Req / 60s</p>
                         <p
                           className={`text-2xl font-black ${
-                            user.reqPerMin > (data?.maxReqPerMin ?? 15)
+                            user.reqPerMin > maxLimit
                               ? "text-red-400 animate-pulse"
                               : isHighRisk
                               ? "text-amber-400"

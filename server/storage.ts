@@ -183,7 +183,10 @@ export class DatabaseStorage implements IStorage {
       { key: "PAYMENT_TRC20_ENABLED", value: "false" },
       { key: "PAYMENT_APTOS_ENABLED", value: "false" },
       { key: "TRC20_VERIFICATION_MODE", value: "binance" },
-      { key: "APTOS_VERIFICATION_MODE", value: "binance" }
+      { key: "APTOS_VERIFICATION_MODE", value: "binance" },
+      { key: "SPAM_AUTO_BAN_ENABLED", value: "true" },
+      { key: "SPAM_MAX_REQ_PER_MIN", value: "15" },
+      { key: "SPAM_TEMP_BAN_DURATION_MINS", value: "15" }
     ];
 
     for (const s of defaultSettings) {
