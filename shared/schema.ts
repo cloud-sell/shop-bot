@@ -23,6 +23,7 @@ export const products = pgTable("products", {
   description: text("description"),
   type: text("type").notNull(), // Category (e.g. AWS, DigitalOcean)
   price: integer("price").notNull(), // In cents
+  customEmojiId: text("custom_emoji_id"),
   status: text("status").notNull().default("available"),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -240,6 +241,7 @@ export const specialOffers = pgTable("special_offers", {
   description: text("description"),
   bundleQuantity: integer("bundle_quantity").notNull(),
   price: integer("price").notNull(), // In cents
+  customEmojiId: text("custom_emoji_id"),
   status: text("status").notNull().default("active"),
   expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").defaultNow(),

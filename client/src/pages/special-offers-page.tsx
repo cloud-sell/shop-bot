@@ -56,6 +56,7 @@ const specialOfferFormSchema = insertSpecialOfferSchema.extend({
   price: z.coerce.number().min(0.01, "Price must be greater than 0"),
   bundleQuantity: z.coerce.number().min(1, "Quantity must be at least 1"),
   durationHours: z.string().optional().nullable(),
+  customEmojiId: z.string().optional().nullable(),
 });
 
 type SpecialOfferFormValues = z.infer<typeof specialOfferFormSchema>;
@@ -180,10 +181,17 @@ export default function SpecialOffersPage() {
                       <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-yellow-500/20 to-orange-500/20 flex items-center justify-center text-yellow-400 group-hover:scale-105 transition-transform duration-300 shadow-md">
                         <Tag className="w-5 h-5" />
                       </div>
-                      <div className="flex flex-col">
-                        <span className="text-sm font-black text-white tracking-tight leading-tight">{offer.name}</span>
+                      <div className="flex flex-col gap-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-black text-white tracking-tight leading-tight">{offer.name}</span>
+                          {offer.customEmojiId && (
+                            <Badge variant="outline" className="border-yellow-500/30 text-yellow-400 bg-yellow-500/10 px-1.5 py-0.2 rounded text-[9px] font-mono">
+                              Emoji: {offer.customEmojiId}
+                            </Badge>
+                          )}
+                        </div>
                         <span className="text-[10px] text-white/30 font-medium truncate max-w-[200px] leading-tight">
-                          {offer.description}
+                          Product: {offer.product?.name || 'N/A'}
                         </span>
                       </div>
                     </div>
@@ -448,6 +456,25 @@ function CreateOfferDialog({ open, onOpenChange }: { open: boolean, onOpenChange
 
             <FormField
               control={form.control}
+              name="customEmojiId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-[8px] font-black uppercase tracking-widest text-white/30 ml-0.5">Custom Premium Emoji ID (Optional)</FormLabel>
+                  <FormControl>
+                    <Input 
+                      placeholder="e.g. 5814427657609153890" 
+                      className="glass-panel h-8 rounded-lg border-white/5 bg-white/[0.02] text-xs text-white font-mono" 
+                      value={field.value || ""} 
+                      onChange={field.onChange}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
               name="description"
               render={({ field }) => (
                 <FormItem>
@@ -506,6 +533,7 @@ function EditOfferDialog({ offer, onOpenChange }: { offer: (SpecialOffer & { pro
       price: offer.price / 100,
       status: offer.status as "active" | "inactive",
       durationHours: "",
+      customEmojiId: offer.customEmojiId || "",
     });
   }
 
@@ -647,6 +675,25 @@ function EditOfferDialog({ offer, onOpenChange }: { offer: (SpecialOffer & { pro
                       step="0.5"
                       placeholder="Add hours..."
                       className="glass-panel h-9 rounded-lg border-white/5 bg-white/[0.02] text-xs text-white focus:border-purple-500/50" 
+                      value={field.value || ""} 
+                      onChange={field.onChange}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="customEmojiId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-[8px] font-black uppercase tracking-widest text-white/30 ml-0.5">Custom Premium Emoji ID (Optional)</FormLabel>
+                  <FormControl>
+                    <Input 
+                      placeholder="e.g. 5814427657609153890" 
+                      className="glass-panel h-9 rounded-lg border-white/5 bg-white/[0.02] text-xs text-white font-mono" 
                       value={field.value || ""} 
                       onChange={field.onChange}
                     />

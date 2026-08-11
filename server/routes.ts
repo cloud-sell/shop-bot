@@ -3603,9 +3603,10 @@ async function processAntiSpamCheck(userId: string, chatId: number, queryId?: st
 
           for (const offer of offers) {
             const priceUSD = (offer.price / 100).toFixed(2);
-            text += `<b>${offer.name}</b>\n\n`;
-            text += `<tg-emoji emoji-id="6276134137963222688">🎁</tg-emoji> Quantity: <b>${offer.bundleQuantity} pcs</b>\n`;
-            text += `<tg-emoji emoji-id="5201692367437974073">💎</tg-emoji> Bundle Price: <b>$${priceUSD}</b>\n\n`;
+            const titleEmoji = offer.customEmojiId ? `<tg-emoji emoji-id="${offer.customEmojiId}">🎁</tg-emoji>` : `<tg-emoji emoji-id="6276134137963222688">🎁</tg-emoji>`;
+            text += `${titleEmoji} <b>${offer.name}</b>\n`;
+            text += `💰 Price: <b>$${priceUSD} USD</b>\n`;
+            text += `📦 Quantity: <b>${offer.bundleQuantity} pcs</b>\n`;
 
             if (offer.expiresAt) {
               const diff = new Date(offer.expiresAt).getTime() - Date.now();
@@ -5097,8 +5098,9 @@ async function processAntiSpamCheck(userId: string, chatId: number, queryId?: st
             for (const item of items) {
               let formattedName = escapeHTML(item.name).replace(/🇱🇰/g, '<tg-emoji emoji-id="5224277294050192388">🇱🇰</tg-emoji>');
 
-              // Also add custom icons to AWS names if it starts with AWS but avoid double tagging 
-              if (!formattedName.includes('5785025630055700143')) {
+              if (item.customEmojiId) {
+                formattedName = `<tg-emoji emoji-id="${item.customEmojiId}">⭐</tg-emoji> ${formattedName}`;
+              } else if (!formattedName.includes('5785025630055700143')) {
                 formattedName = formattedName.replace(/\bAWS\b/gi, '<tg-emoji emoji-id="5785025630055700143">☁️</tg-emoji> AWS');
               }
 
@@ -5117,7 +5119,10 @@ async function processAntiSpamCheck(userId: string, chatId: number, queryId?: st
           let iconEmojiId: string | undefined = undefined;
           const catLower = cat.toLowerCase();
 
-          if (catLower.includes('digital ocean') || catLower.includes('digitalocean')) {
+          const prodWithEmoji = availableProducts.find(p => p.type === cat && p.customEmojiId);
+          if (prodWithEmoji?.customEmojiId) {
+            iconEmojiId = prodWithEmoji.customEmojiId;
+          } else if (catLower.includes('digital ocean') || catLower.includes('digitalocean')) {
             btnText = 'Digital Ocean';
             iconEmojiId = '5785345544989710932';
           } else if (catLower.includes('aws')) {

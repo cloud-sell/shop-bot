@@ -67,15 +67,17 @@ export default function SpamProtectorPage() {
   const [autoBanEnabled, setAutoBanEnabled] = useState<boolean>(true);
   const [maxReqPerMin, setMaxReqPerMin] = useState<number>(15);
   const [tempBanDurationMins, setTempBanDurationMins] = useState<number>(15);
+  const [isFormInitialized, setIsFormInitialized] = useState<boolean>(false);
 
-  // Sync state when data loads or updates from backend
+  // Initial form state population once data loads
   useEffect(() => {
-    if (data) {
+    if (data && !isFormInitialized) {
       setAutoBanEnabled(data.autoBanEnabled);
       setMaxReqPerMin(data.maxReqPerMin);
       setTempBanDurationMins(data.tempBanDurationMins);
+      setIsFormInitialized(true);
     }
-  }, [data?.autoBanEnabled, data?.maxReqPerMin, data?.tempBanDurationMins]);
+  }, [data, isFormInitialized]);
 
   // Setup WebSocket real-time updates listener
   useEffect(() => {

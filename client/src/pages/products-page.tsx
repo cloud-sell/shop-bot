@@ -189,6 +189,7 @@ function CredentialsDialog({ product }: { product: Product }) {
 // Zod schema for the form (needs coercion for number)
 const productFormSchema = insertProductSchema.extend({
   price: z.coerce.number().min(0.01, "Price must be greater than 0"),
+  customEmojiId: z.string().optional().nullable(),
 });
 
 type ProductFormValues = z.infer<typeof productFormSchema>;
@@ -299,7 +300,14 @@ export default function ProductsPage() {
                         <Server className="w-5 h-5" />
                       </div>
                       <div className="flex flex-col gap-0">
-                        <span className="text-sm font-black text-white tracking-tight leading-tight">{product.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-black text-white tracking-tight leading-tight">{product.name}</span>
+                          {product.customEmojiId && (
+                            <Badge variant="outline" className="border-purple-500/30 text-purple-400 bg-purple-500/10 px-1.5 py-0.2 rounded text-[9px] font-mono">
+                              Emoji: {product.customEmojiId}
+                            </Badge>
+                          )}
+                        </div>
                         <span className="text-[10px] text-white/30 font-medium truncate max-w-[200px] leading-tight">
                           {product.description}
                         </span>
@@ -424,6 +432,7 @@ function EditProductDialog({
         : "Custom",
       description: product.description || "",
       price: product.price / 100,
+      customEmojiId: product.customEmojiId || "",
     },
   });
 
@@ -532,6 +541,21 @@ function EditProductDialog({
                 </FormControl>
               </FormItem>
             )}
+
+            <FormField
+              control={form.control}
+              name="customEmojiId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-[9px] font-black uppercase tracking-widest text-white/30 ml-0.5">Custom Premium Emoji ID (Optional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. 5785345544989710932" className="glass-panel h-11 rounded-xl border-white/5 bg-white/[0.02] text-sm text-white placeholder:text-white/10 focus:border-purple-500/50 transition-all font-mono" {...field} value={field.value ?? ""} />
+                  </FormControl>
+                  <FormDescription className="text-[10px] text-white/30">Telegram Premium Emoji ID to display on bot product buttons</FormDescription>
+                  <FormMessage className="text-red-400 font-bold text-xs" />
+                </FormItem>
+              )}
+            />
 
             <FormField
               control={form.control}
@@ -657,6 +681,7 @@ function CreateProductDialog({ open, onOpenChange }: { open: boolean, onOpenChan
       type: "AWS",
       description: "",
       price: 0,
+      customEmojiId: "",
     },
   });
 
@@ -775,6 +800,21 @@ function CreateProductDialog({ open, onOpenChange }: { open: boolean, onOpenChan
                 </FormControl>
               </FormItem>
             )}
+
+            <FormField
+              control={form.control}
+              name="customEmojiId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-[9px] font-black uppercase tracking-widest text-white/30 ml-0.5">Custom Premium Emoji ID (Optional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. 5785345544989710932" className="glass-panel h-11 rounded-xl border-white/5 bg-white/[0.02] text-sm text-white placeholder:text-white/10 focus:border-purple-500/50 transition-all font-mono" {...field} value={field.value ?? ""} />
+                  </FormControl>
+                  <FormDescription className="text-[10px] text-white/30">Telegram Premium Emoji ID to display on bot product buttons</FormDescription>
+                  <FormMessage className="text-red-400 font-bold text-xs" />
+                </FormItem>
+              )}
+            />
 
             <FormField
               control={form.control}
