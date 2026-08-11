@@ -5055,8 +5055,8 @@ const setupBotHandlers = (targetBot: TelegramBot) => {
           }
           const msgText = `<tg-emoji emoji-id="5361543877599724417">🤖</tg-emoji> <b>@CryptoBot Top-up Invoice</b>\n` +
             `➖➖➖➖➖➖➖➖➖➖\n` +
-            `▪️ Top-up amount: <b>$${amount.toFixed(2)} USD</b>\n` +
-            `▪️ Status: <tg-emoji emoji-id="6010111371251815589">⏳</tg-emoji> Pending\n` +
+            `<tg-emoji emoji-id="5370919202796348364">▪️</tg-emoji> Top-up amount: <b>$${amount.toFixed(2)} USD</b>\n` +
+            `<tg-emoji emoji-id="5370919202796348364">▪️</tg-emoji> Status: <tg-emoji emoji-id="6010111371251815589">⏳</tg-emoji> Pending\n` +
             `➖➖➖➖➖➖➖➖➖➖\n` +
             `Click on the button below to pay via <b>@CryptoBot</b>:`;
 
