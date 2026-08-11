@@ -65,11 +65,11 @@ export default function SpamProtectorPage() {
   });
 
   const [autoBanEnabled, setAutoBanEnabled] = useState<boolean>(true);
-  const [maxReqInput, setMaxReqInput] = useState<string>("15");
-  const [tempBanInput, setTempBanInput] = useState<string>("15");
+  const [maxReqInput, setMaxReqInput] = useState<string>("");
+  const [tempBanInput, setTempBanInput] = useState<string>("");
   const [isUserEditing, setIsUserEditing] = useState<boolean>(false);
 
-  // Sync state whenever fresh data arrives from backend (if user is not actively typing)
+  // Sync state whenever fresh data arrives from backend (unless user is actively editing inputs)
   useEffect(() => {
     if (data && !isUserEditing) {
       setAutoBanEnabled(Boolean(data.autoBanEnabled));
@@ -119,10 +119,27 @@ export default function SpamProtectorPage() {
     },
     onSuccess: (resData) => {
       if (resData) {
-        setAutoBanEnabled(Boolean(resData.autoBanEnabled));
-        setMaxReqInput(String(resData.maxReqPerMin));
-        setTempBanInput(String(resData.tempBanDurationMins));
+        const newAutoBan = Boolean(resData.autoBanEnabled);
+        const newMaxReq = Number(resData.maxReqPerMin) || 15;
+        const newTempMins = Number(resData.tempBanDurationMins) || 15;
+
+        // Synchronously update local component state
+        setAutoBanEnabled(newAutoBan);
+        setMaxReqInput(String(newMaxReq));
+        setTempBanInput(String(newTempMins));
+
+        // Synchronously update TanStack Query cache so background refetches never see stale data
+        queryClient.setQueryData<SpamStatsResponse>(["/api/spam-protector/stats"], (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            autoBanEnabled: newAutoBan,
+            maxReqPerMin: newMaxReq,
+            tempBanDurationMins: newTempMins,
+          };
+        });
       }
+
       setIsUserEditing(false);
       queryClient.invalidateQueries({ queryKey: ["/api/spam-protector/stats"] });
       refetch();
@@ -219,7 +236,10 @@ export default function SpamProtectorPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-bold uppercase tracking-wider text-white/50">Max Rate Limit</p>
-                <h2 className="text-4xl font-black text-amber-400 mt-1">{data?.maxReqPerMin ?? 15} <span className="text-sm font-normal text-white/50">/min</span></h2>
+                <h2 className="text-4xl font-black text-amber-400 mt-1">
+                  {isLoading ? <Loader2 className="w-6 h-6 animate-spin inline" /> : (data?.maxReqPerMin ?? 15)}{" "}
+                  <span className="text-sm font-normal text-white/50">/min</span>
+                </h2>
               </div>
               <Zap className="w-10 h-10 text-amber-400 opacity-80" />
             </div>
@@ -232,7 +252,9 @@ export default function SpamProtectorPage() {
               <div>
                 <p className="text-xs font-bold uppercase tracking-wider text-white/50">Auto-Ban Engine</p>
                 <h2 className="text-2xl font-black mt-2">
-                  {data?.autoBanEnabled ? (
+                  {isLoading ? (
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                  ) : data?.autoBanEnabled ? (
                     <span className="text-emerald-400 flex items-center gap-1.5"><ShieldCheck className="w-6 h-6" /> ACTIVE</span>
                   ) : (
                     <span className="text-red-400 flex items-center gap-1.5"><AlertTriangle className="w-6 h-6" /> OFF</span>
@@ -269,6 +291,7 @@ export default function SpamProtectorPage() {
                   setAutoBanEnabled(val);
                   setIsUserEditing(true);
                 }}
+                disabled={isLoading}
                 className="data-[state=checked]:bg-emerald-500"
               />
             </div>
@@ -276,40 +299,54 @@ export default function SpamProtectorPage() {
             {/* Max Req per Min */}
             <div className="glass-panel p-5 rounded-2xl border-white/10 space-y-2">
               <Label className="text-white font-bold text-sm">Max Requests Per Minute</Label>
-              <Input
-                type="number"
-                min="1"
-                max="500"
-                value={maxReqInput}
-                onChange={(e) => {
-                  setMaxReqInput(e.target.value);
-                  setIsUserEditing(true);
-                }}
-                className="glass-panel border-white/10 text-white font-bold"
-              />
+              {isLoading && maxReqInput === "" ? (
+                <div className="h-10 flex items-center px-3 glass-panel border-white/10 rounded-md">
+                  <Loader2 className="w-4 h-4 animate-spin text-white/40" />
+                </div>
+              ) : (
+                <Input
+                  type="number"
+                  min="1"
+                  max="500"
+                  value={maxReqInput}
+                  onChange={(e) => {
+                    setMaxReqInput(e.target.value);
+                    setIsUserEditing(true);
+                  }}
+                  placeholder="15"
+                  className="glass-panel border-white/10 text-white font-bold"
+                />
+              )}
             </div>
 
             {/* Temp Ban Duration */}
             <div className="glass-panel p-5 rounded-2xl border-white/10 space-y-2">
               <Label className="text-white font-bold text-sm">Auto-Ban Penalty Duration (Mins)</Label>
-              <Input
-                type="number"
-                min="1"
-                max="1440"
-                value={tempBanInput}
-                onChange={(e) => {
-                  setTempBanInput(e.target.value);
-                  setIsUserEditing(true);
-                }}
-                className="glass-panel border-white/10 text-white font-bold"
-              />
+              {isLoading && tempBanInput === "" ? (
+                <div className="h-10 flex items-center px-3 glass-panel border-white/10 rounded-md">
+                  <Loader2 className="w-4 h-4 animate-spin text-white/40" />
+                </div>
+              ) : (
+                <Input
+                  type="number"
+                  min="1"
+                  max="1440"
+                  value={tempBanInput}
+                  onChange={(e) => {
+                    setTempBanInput(e.target.value);
+                    setIsUserEditing(true);
+                  }}
+                  placeholder="15"
+                  className="glass-panel border-white/10 text-white font-bold"
+                />
+              )}
             </div>
           </div>
 
           <div className="flex justify-end">
             <Button
               onClick={handleConfigSave}
-              disabled={configMutation.isPending}
+              disabled={configMutation.isPending || isLoading}
               className="bg-gradient-to-r from-purple-500 to-blue-600 font-bold px-8 h-12 rounded-xl shadow-lg"
             >
               {configMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Save className="w-5 h-5 mr-2" />}
