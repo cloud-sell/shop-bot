@@ -3460,8 +3460,8 @@ const setupBotHandlers = (targetBot: TelegramBot) => {
 
         const keyboard: any[] = [];
         const row1: any[] = [];
-        if (cryptobotEnabled) row1.push({ text: '🤖 @CryptoBot', callback_data: 'payment_cryptobot' });
-        if (binanceEnabled) row1.push({ text: 'Binance Pay', callback_data: 'payment_binance' });
+        if (cryptobotEnabled) row1.push({ text: 'CryptoBot', callback_data: 'payment_cryptobot', icon_custom_emoji_id: '5361543877599724417' });
+        if (binanceEnabled) row1.push({ text: 'Binance Pay', callback_data: 'payment_binance', icon_custom_emoji_id: '6235482598924095547' });
         if (row1.length > 0) keyboard.push(row1);
 
         if (keyboard.length === 0) {
