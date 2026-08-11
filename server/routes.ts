@@ -5931,26 +5931,27 @@ BackupService.startBackupScheduler().catch(err => console.error("Backup schedule
 
             const activeBot = await getBroadcastBot();
             if (activeBot && user) {
-                await activeBot.sendMessage(
-                  user.telegramId,
-                  `✅ <b>@CryptoBot Payment Verified!</b>\n\n` +
-                  `💰 Credited: <b>$${(payment.amount / 100).toFixed(2)}</b> has been added to your balance.\n` +
-                  `Thank you! 🤍`,
-                  { parse_mode: 'HTML' }
-                ).catch((err: any) => console.error("Failed to notify user:", err));
-              }
+              await activeBot.sendMessage(
+                user.telegramId,
+                `✅ <b>@CryptoBot Payment Verified!</b>\n\n` +
+                `💰 Credited: <b>$${(updatedPayment.amount / 100).toFixed(2)}</b> has been added to your balance.\n` +
+                `Thank you! 🤍`,
+                { parse_mode: 'HTML' }
+              ).catch((err: any) => console.error("Failed to notify user:", err));
+            }
 
+            if (user) {
               const userDisplayName = user.firstName || user.username || "User";
               io.emit('admin_notification', {
                 type: 'deposit',
                 title: 'New @CryptoBot Deposit',
-                message: `${userDisplayName} deposited $${(payment.amount / 100).toFixed(2)} via @CryptoBot`,
-                data: { paymentId: payment.id, userId: user.telegramId, amount: payment.amount / 100, txId: uuid }
+                message: `${userDisplayName} deposited $${(updatedPayment.amount / 100).toFixed(2)} via @CryptoBot`,
+                data: { paymentId: updatedPayment.id, userId: user.telegramId, amount: updatedPayment.amount / 100, txId: uuid }
               });
 
               sendAdminPushNotification(
                 'New @CryptoBot Deposit',
-                `${userDisplayName} deposited $${(payment.amount / 100).toFixed(2)}`
+                `${userDisplayName} deposited $${(updatedPayment.amount / 100).toFixed(2)}`
               ).catch(console.error);
             }
           }
