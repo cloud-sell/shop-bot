@@ -370,6 +370,40 @@ async function createCryptoBotInvoice(
   }
 }
 
+async function checkCryptoBotInvoiceStatus(invoiceId: string): Promise<{ paid: boolean; error?: string }> {
+  try {
+    const tokenSetting = await storage.getSetting('CRYPTO_BOT_API_TOKEN');
+    const apiToken = tokenSetting?.value || process.env.CRYPTO_BOT_API_TOKEN;
+    if (!apiToken) return { paid: false, error: 'CryptoBot API token missing' };
+
+    const isTestnet = (await storage.getSetting('CRYPTO_BOT_TESTNET'))?.value === 'true';
+    const baseUrl = isTestnet ? 'https://testnet-pay.crypt.bot/api' : 'https://pay.crypt.bot/api';
+
+    const res = await axios.post(
+      `${baseUrl}/getInvoices`,
+      { invoice_ids: [parseInt(invoiceId, 10)] },
+      {
+        headers: {
+          'Crypto-Pay-API-Token': apiToken,
+          'Content-Type': 'application/json'
+        },
+        timeout: 10000
+      }
+    );
+
+    if (res.data && res.data.ok && res.data.result && res.data.result.items && res.data.result.items.length > 0) {
+      const inv = res.data.result.items[0];
+      if (inv.status === 'paid') {
+        return { paid: true };
+      }
+    }
+    return { paid: false };
+  } catch (err: any) {
+    console.error('CryptoBot getInvoices check error:', err.response?.data || err.message);
+    return { paid: false, error: err.message };
+  }
+}
+
 declare module "express-session" {
   interface SessionData {
     userId: number;
@@ -3777,6 +3811,55 @@ const setupBotHandlers = (targetBot: TelegramBot) => {
               if (checkingMsg) await targetBot.deleteMessage(chatId, checkingMsg.message_id).catch(() => { });
               await targetBot.sendMessage(chatId, "❌ Error checking Cryptomus payment status.");
             }
+          } else if (payment.paymentMethod === 'cryptobot') {
+            if (!payment.externalId) {
+              await storage.updatePayment(payment.id, { status: 'pending' });
+              if (checkingMsg) await targetBot.deleteMessage(chatId, checkingMsg.message_id).catch(() => { });
+              await targetBot.sendMessage(chatId, "⚠️ @CryptoBot Invoice ID not found. Please click the pay button to complete payment.");
+              return;
+            }
+
+            const check = await checkCryptoBotInvoiceStatus(payment.externalId);
+            if (check.paid) {
+              if (checkingMsg) await targetBot.deleteMessage(chatId, checkingMsg.message_id).catch(() => { });
+
+              // ATOMIC DB UPDATE TO PREVENT DOUBLE CREDITING
+              const [updatedPayment] = await db.update(payments)
+                .set({ status: 'completed', updatedAt: new Date() })
+                .where(and(eq(payments.id, payment.id), eq(payments.status, 'pending')))
+                .returning();
+
+              if (updatedPayment) {
+                await db.execute(sql`UPDATE telegram_users SET balance = balance + ${updatedPayment.amount} WHERE id = ${updatedPayment.telegramUserId}`);
+                await targetBot.sendMessage(chatId, `✅ <b>@CryptoBot Payment Verified!</b>\n\n💰 Credited: <b>$${(updatedPayment.amount / 100).toFixed(2)}</b> has been added to your balance. Thank you! 🤍`, { parse_mode: 'HTML' });
+
+                const userDisplayName = tgUser.firstName || tgUser.username || "User";
+                io.emit('admin_notification', {
+                  type: 'deposit',
+                  title: 'New @CryptoBot Deposit',
+                  message: `${userDisplayName} deposited $${(updatedPayment.amount / 100).toFixed(2)} via @CryptoBot`,
+                  data: { paymentId: updatedPayment.id, userId: tgUser.telegramId, amount: updatedPayment.amount / 100, txId: payment.externalId }
+                });
+
+                sendAdminPushNotification(
+                  'New @CryptoBot Deposit',
+                  `${userDisplayName} deposited $${(updatedPayment.amount / 100).toFixed(2)}`
+                );
+              } else {
+                await targetBot.sendMessage(chatId, `ℹ️ <b>Payment already processed and credited.</b>`, { parse_mode: 'HTML' });
+              }
+            } else {
+              await storage.updatePayment(payment.id, { status: 'pending' });
+              if (checkingMsg) await targetBot.deleteMessage(chatId, checkingMsg.message_id).catch(() => { });
+              const failMsg = `<tg-emoji emoji-id="6298544405435387645">❌</tg-emoji> <b>@CryptoBot Payment Not Detected Yet.</b>\n\nPlease make sure you completed the payment on @CryptoBot before clicking check.`;
+              const sentMsg = await targetBot.sendMessage(chatId, failMsg, { parse_mode: 'HTML' });
+              if (sentMsg) {
+                await storage.updateTelegramUser(tgUser.id, { lastErrorMessageId: sentMsg.message_id });
+                setTimeout(() => {
+                  targetBot.deleteMessage(chatId, sentMsg.message_id).catch(() => { });
+                }, 15000);
+              }
+            }
           } else if (payment.paymentMethod === 'trc20') {
             const walletAddress = (await storage.getSetting('TRC20_WALLET_ADDRESS'))?.value;
             if (!walletAddress) {
@@ -5816,7 +5899,9 @@ BackupService.startBackupScheduler().catch(err => console.error("Backup schedule
         return res.status(400).json({ message: "Missing signature header" });
       }
 
-      const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+      const rawBody = (req as any).rawBody
+        ? ((req as any).rawBody as Buffer).toString('utf-8')
+        : (typeof req.body === 'string' ? req.body : JSON.stringify(req.body));
       const secret = crypto.createHash('sha256').update(apiToken).digest();
       const checkSignature = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
 
@@ -5833,21 +5918,19 @@ BackupService.startBackupScheduler().catch(err => console.error("Backup schedule
         const uuid = invoice.invoice_id ? invoice.invoice_id.toString() : '';
 
         if (!isNaN(paymentId)) {
-          const payment = await storage.getPayment(paymentId);
-          if (payment && payment.status === 'pending') {
-            const [user] = await db.select().from(telegramUsers).where(eq(telegramUsers.id, payment.telegramUserId));
-            if (user) {
-              await storage.updateTelegramUser(user.id, {
-                balance: user.balance + payment.amount
-              });
-              await storage.updatePayment(payment.id, {
-                status: 'completed',
-                externalId: uuid,
-                updatedAt: new Date()
-              });
+          // ATOMIC UPDATE: Only update if status is currently 'pending' to prevent DOUBLE CREDITING
+          const [updatedPayment] = await db.update(payments)
+            .set({ status: 'completed', externalId: uuid, updatedAt: new Date() })
+            .where(and(eq(payments.id, paymentId), eq(payments.status, 'pending')))
+            .returning();
 
-              const activeBot = await getBroadcastBot();
-              if (activeBot) {
+          if (updatedPayment) {
+            await db.execute(sql`UPDATE telegram_users SET balance = balance + ${updatedPayment.amount} WHERE id = ${updatedPayment.telegramUserId}`);
+
+            const [user] = await db.select().from(telegramUsers).where(eq(telegramUsers.id, updatedPayment.telegramUserId));
+
+            const activeBot = await getBroadcastBot();
+            if (activeBot && user) {
                 await activeBot.sendMessage(
                   user.telegramId,
                   `✅ <b>@CryptoBot Payment Verified!</b>\n\n` +
