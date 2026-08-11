@@ -334,10 +334,8 @@ async function createCryptoBotInvoice(
 
     const botUsername = (await storage.getSetting('BOT_USERNAME'))?.value || '';
     const invoiceBody: any = {
-      currency_type: 'fiat',
-      fiat: 'USD',
+      asset: 'USDT',
       amount: amountUsd.toFixed(2),
-      accepted_assets: 'USDT,BTC,ETH,TON,BNB,TRX',
       payload: payloadStr,
       description: `Deposit $${amountUsd.toFixed(2)} to ShopBot`
     };
