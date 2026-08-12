@@ -324,9 +324,18 @@ async function createCryptoBotInvoice(
 ): Promise<{ success: boolean; payUrl?: string; invoiceId?: number; error?: string }> {
   try {
     const tokenSetting = await storage.getSetting('CRYPTO_BOT_API_TOKEN');
-    const apiToken = tokenSetting?.value || process.env.CRYPTO_BOT_API_TOKEN;
+    const rawToken = tokenSetting?.value || process.env.CRYPTO_BOT_API_TOKEN || '';
+    const apiToken = rawToken.trim();
+
     if (!apiToken) {
-      return { success: false, error: '@CryptoBot API token is not configured in settings.' };
+      return { success: false, error: '@CryptoBot API token is not configured in Admin Settings.' };
+    }
+
+    if (apiToken.startsWith('http://') || apiToken.startsWith('https://')) {
+      return { 
+        success: false, 
+        error: '@CryptoBot API Token in Admin Settings is invalid (contains a URL instead of a bot token). Please update your API token in Admin Dashboard > Settings.' 
+      };
     }
 
     const isTestnet = (await storage.getSetting('CRYPTO_BOT_TESTNET'))?.value === 'true';
@@ -365,16 +374,26 @@ async function createCryptoBotInvoice(
 
     return { success: false, error: res.data?.error?.name || 'Failed to create invoice via @CryptoBot' };
   } catch (err: any) {
+    const errCode = err.response?.data?.error?.name || err.message || '';
     console.error('CryptoBot createInvoice error:', err.response?.data || err.message);
-    return { success: false, error: err.response?.data?.error?.name || err.message };
+    if (errCode === 'UNAUTHORIZED') {
+      return { 
+        success: false, 
+        error: 'Invalid @CryptoBot API Token (UNAUTHORIZED). Please get a valid token from @CryptoBot or @CryptoTestnetBot and update it in Admin Dashboard > Settings.' 
+      };
+    }
+    return { success: false, error: errCode || 'Failed to create invoice via @CryptoBot' };
   }
 }
 
 async function checkCryptoBotInvoiceStatus(invoiceId: string): Promise<{ paid: boolean; error?: string }> {
   try {
     const tokenSetting = await storage.getSetting('CRYPTO_BOT_API_TOKEN');
-    const apiToken = tokenSetting?.value || process.env.CRYPTO_BOT_API_TOKEN;
-    if (!apiToken) return { paid: false, error: 'CryptoBot API token missing' };
+    const rawToken = tokenSetting?.value || process.env.CRYPTO_BOT_API_TOKEN || '';
+    const apiToken = rawToken.trim();
+    if (!apiToken || apiToken.startsWith('http://') || apiToken.startsWith('https://')) {
+      return { paid: false, error: 'CryptoBot API token missing or invalid' };
+    }
 
     const isTestnet = (await storage.getSetting('CRYPTO_BOT_TESTNET'))?.value === 'true';
     const baseUrl = isTestnet ? 'https://testnet-pay.crypt.bot/api' : 'https://pay.crypt.bot/api';

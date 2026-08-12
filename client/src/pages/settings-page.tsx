@@ -1355,9 +1355,20 @@ export default function SettingsPage() {
                       onChange={(e) => setCryptoBotToken(e.target.value)}
                     />
                     <Button
-                      onClick={() => cryptoBotTokenMutation.mutate(cryptoBotToken)}
+                      onClick={() => {
+                        const trimmed = cryptoBotToken.trim();
+                        if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+                          toast({
+                            title: "Invalid CryptoBot API Token",
+                            description: "You entered a web URL instead of an API Token. Please paste your actual API Token from Telegram bot @CryptoBot or @CryptoTestnetBot (e.g. 284729:AAX...)!",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+                        cryptoBotTokenMutation.mutate(trimmed);
+                      }}
                       disabled={cryptoBotTokenMutation.isPending}
-                      className="h-12 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 font-bold"
+                      className="h-12 px-6 rounded-xl bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 font-bold"
                     >
                       {cryptoBotTokenMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
                     </Button>
