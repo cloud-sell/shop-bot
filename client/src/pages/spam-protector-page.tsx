@@ -23,7 +23,6 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Filter,
   Users
 } from "lucide-react";
 import {
@@ -65,27 +64,26 @@ export default function SpamProtectorPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
-  // Main Anti-Spam Data Query (Stable query - NO aggressive 1.5s auto-polling jitter!)
+  // Main Anti-Spam Data Query
   const { data, isLoading, refetch, isFetching } = useQuery<SpamStatsResponse>({
     queryKey: ["/api/spam-protector/stats"],
-    staleTime: 5000,
+    staleTime: 0, // Always fetch fresh data on navigation
   });
 
   // Local Form Controls for Configuration
   const [autoBanEnabled, setAutoBanEnabled] = useState<boolean>(true);
-  const [maxReqInput, setMaxReqInput] = useState<string>("15");
-  const [tempBanInput, setTempBanInput] = useState<string>("15");
-  const [hasFormLoaded, setHasFormLoaded] = useState<boolean>(false);
+  const [maxReqInput, setMaxReqInput] = useState<string>("");
+  const [tempBanInput, setTempBanInput] = useState<string>("");
+  const [isDirty, setIsDirty] = useState<boolean>(false);
 
-  // Sync Form inputs ONCE when server data loads
+  // Sync Form inputs with server data whenever fresh data arrives (unless user has pending un-saved edits)
   useEffect(() => {
-    if (data && !hasFormLoaded) {
+    if (data && !isDirty) {
       setAutoBanEnabled(Boolean(data.autoBanEnabled));
       setMaxReqInput(String(data.maxReqPerMin ?? 15));
       setTempBanInput(String(data.tempBanDurationMins ?? 15));
-      setHasFormLoaded(true);
     }
-  }, [data, hasFormLoaded]);
+  }, [data, isDirty]);
 
   // Setup WebSocket real-time updates listener
   useEffect(() => {
@@ -116,6 +114,7 @@ export default function SpamProtectorPage() {
         setAutoBanEnabled(newAutoBan);
         setMaxReqInput(String(newMaxReq));
         setTempBanInput(String(newTempMins));
+        setIsDirty(false);
 
         queryClient.setQueryData<SpamStatsResponse>(["/api/spam-protector/stats"], (old) => {
           if (!old) return old;
@@ -127,6 +126,8 @@ export default function SpamProtectorPage() {
           };
         });
       }
+      queryClient.invalidateQueries({ queryKey: ["/api/spam-protector/stats"] });
+      refetch();
       toast({
         title: "🛡️ Anti-Spam Rules Saved",
         description: "Rate limiting and auto-ban rules have been saved to database.",
@@ -222,7 +223,10 @@ export default function SpamProtectorPage() {
         </div>
 
         <Button
-          onClick={() => refetch()}
+          onClick={() => {
+            setIsDirty(false);
+            refetch();
+          }}
           disabled={isFetching}
           variant="outline"
           className="glass-panel border-white/20 text-white hover:bg-white/10 h-11 px-5 rounded-xl font-bold text-sm"
@@ -314,7 +318,10 @@ export default function SpamProtectorPage() {
               </div>
               <Switch
                 checked={autoBanEnabled}
-                onCheckedChange={setAutoBanEnabled}
+                onCheckedChange={(val) => {
+                  setAutoBanEnabled(val);
+                  setIsDirty(true);
+                }}
                 className="data-[state=checked]:bg-emerald-500"
               />
             </div>
@@ -327,7 +334,10 @@ export default function SpamProtectorPage() {
                 min="1"
                 max="500"
                 value={maxReqInput}
-                onChange={(e) => setMaxReqInput(e.target.value)}
+                onChange={(e) => {
+                  setMaxReqInput(e.target.value);
+                  setIsDirty(true);
+                }}
                 placeholder="15"
                 className="glass-panel border-white/10 text-white font-bold h-11 text-base bg-black/40"
               />
@@ -341,7 +351,10 @@ export default function SpamProtectorPage() {
                 min="1"
                 max="1440"
                 value={tempBanInput}
-                onChange={(e) => setTempBanInput(e.target.value)}
+                onChange={(e) => {
+                  setTempBanInput(e.target.value);
+                  setIsDirty(true);
+                }}
                 placeholder="15"
                 className="glass-panel border-white/10 text-white font-bold h-11 text-base bg-black/40"
               />
