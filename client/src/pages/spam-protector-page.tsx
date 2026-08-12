@@ -64,9 +64,13 @@ export default function SpamProtectorPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
-  // Main Anti-Spam Data Query
+  // Main Anti-Spam Data Query (Bypass memory cache, always fetch fresh DB values!)
   const { data, isLoading, refetch, isFetching } = useQuery<SpamStatsResponse>({
     queryKey: ["/api/spam-protector/stats"],
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: "always",
   });
 
   // Local Form Controls for Configuration
@@ -81,7 +85,7 @@ export default function SpamProtectorPage() {
       setMaxReqInput(String(data.maxReqPerMin ?? 15));
       setTempBanInput(String(data.tempBanDurationMins ?? 15));
     }
-  }, [data]);
+  }, [data?.maxReqPerMin, data?.tempBanDurationMins, data?.autoBanEnabled]);
 
   // Setup WebSocket real-time updates listener
   useEffect(() => {
