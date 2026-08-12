@@ -1,1 +1,0 @@
-import{u as t}from"./index-hG-5c2jj.js";import{a as r}from"./routes-D2KB_G7k.js";function i(){return t({queryKey:[r.orders.list.path],queryFn:async()=>{const e=await fetch(r.orders.list.path,{credentials:"include"});if(!e.ok)throw new Error("Failed to fetch orders");const s=await e.json();return r.orders.list.responses[200].parse(s)}})}export{i as u};

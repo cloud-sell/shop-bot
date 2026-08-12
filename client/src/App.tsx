@@ -1,4 +1,3 @@
-import { lazy, Suspense } from "react";
 import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -9,24 +8,25 @@ import { Loader2 } from "lucide-react";
 import { LayoutShell } from "@/components/layout-shell";
 import { AdminNotifier } from "@/components/admin-notifier";
 
-// Lazy load pages for code splitting
-const Dashboard = lazy(() => import("@/pages/dashboard"));
-const ProductsPage = lazy(() => import("@/pages/products-page"));
-const InventoryPage = lazy(() => import("@/pages/inventory-page"));
-const OrdersPage = lazy(() => import("@/pages/orders-page"));
-const PaymentsPage = lazy(() => import("@/pages/payments-page"));
-const SettingsPage = lazy(() => import("@/pages/settings-page"));
-const AwsCheckerPage = lazy(() => import("@/pages/aws-checker-page"));
-const BroadcastPage = lazy(() => import("@/pages/broadcast-page"));
-const LoginPage = lazy(() => import("@/pages/login-page"));
-const SpecialOffersPage = lazy(() => import("@/pages/special-offers-page"));
-const TelegramUsersPage = lazy(() => import("@/pages/telegram-users-page"));
-const SpamProtectorPage = lazy(() => import("@/pages/spam-protector-page"));
-const TelegramClientPage = lazy(() => import("@/pages/telegram-client-page"));
-const BackupPage = lazy(() => import("@/pages/backup-page"));
-const ForwardPage = lazy(() => import("@/pages/forward-page"));
-const MiniAppShop = lazy(() => import("@/pages/mini-app-shop"));
-const NotFound = lazy(() => import("@/pages/not-found"));
+// Eagerly import all pages to eliminate dynamic chunk import errors permanently!
+import Dashboard from "@/pages/dashboard";
+import ProductsPage from "@/pages/products-page";
+import InventoryPage from "@/pages/inventory-page";
+import OrdersPage from "@/pages/orders-page";
+import PaymentsPage from "@/pages/payments-page";
+import SettingsPage from "@/pages/settings-page";
+import AwsCheckerPage from "@/pages/aws-checker-page";
+import BroadcastPage from "@/pages/broadcast-page";
+import LoginPage from "@/pages/login-page";
+import SpecialOffersPage from "@/pages/special-offers-page";
+import TelegramUsersPage from "@/pages/telegram-users-page";
+import SpamProtectorPage from "@/pages/spam-protector-page";
+import TelegramClientPage from "@/pages/telegram-client-page";
+import BackupPage from "@/pages/backup-page";
+import ForwardPage from "@/pages/forward-page";
+import MiniAppShop from "@/pages/mini-app-shop";
+import NotFound from "@/pages/not-found";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 function PageLoader() {
   return (
@@ -35,8 +35,6 @@ function PageLoader() {
     </div>
   );
 }
-
-import { ErrorBoundary } from "@/components/error-boundary";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -52,9 +50,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   return (
     <LayoutShell>
       <ErrorBoundary>
-        <Suspense fallback={<PageLoader />}>
-          <Component />
-        </Suspense>
+        <Component />
       </ErrorBoundary>
     </LayoutShell>
   );
@@ -62,78 +58,74 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 
 function Router() {
   return (
-    <Suspense fallback={<PageLoader />}>
-      <Switch>
-        <Route path="/login">
-          <LoginPage />
-        </Route>
-        
-        <Route path="/shop">
-          <Suspense fallback={<PageLoader />}>
-            <MiniAppShop />
-          </Suspense>
-        </Route>
+    <Switch>
+      <Route path="/login">
+        <LoginPage />
+      </Route>
+      
+      <Route path="/shop">
+        <MiniAppShop />
+      </Route>
 
-        <Route path="/">
-          <ProtectedRoute component={Dashboard} />
-        </Route>
-        
-        <Route path="/products">
-          <ProtectedRoute component={ProductsPage} />
-        </Route>
-        
-        <Route path="/inventory">
-          <ProtectedRoute component={InventoryPage} />
-        </Route>
+      <Route path="/">
+        <ProtectedRoute component={Dashboard} />
+      </Route>
+      
+      <Route path="/products">
+        <ProtectedRoute component={ProductsPage} />
+      </Route>
+      
+      <Route path="/inventory">
+        <ProtectedRoute component={InventoryPage} />
+      </Route>
 
-        <Route path="/orders">
-          <ProtectedRoute component={OrdersPage} />
-        </Route>
+      <Route path="/orders">
+        <ProtectedRoute component={OrdersPage} />
+      </Route>
 
-        <Route path="/payments">
-          <ProtectedRoute component={PaymentsPage} />
-        </Route>
+      <Route path="/payments">
+        <ProtectedRoute component={PaymentsPage} />
+      </Route>
 
-        <Route path="/broadcast">
-          <ProtectedRoute component={BroadcastPage} />
-        </Route>
+      <Route path="/broadcast">
+        <ProtectedRoute component={BroadcastPage} />
+      </Route>
 
-        <Route path="/settings">
-          <ProtectedRoute component={SettingsPage} />
-        </Route>
+      <Route path="/settings">
+        <ProtectedRoute component={SettingsPage} />
+      </Route>
 
-        <Route path="/aws-checker">
-          <ProtectedRoute component={AwsCheckerPage} />
-        </Route>
+      <Route path="/aws-checker">
+        <ProtectedRoute component={AwsCheckerPage} />
+      </Route>
 
-        <Route path="/special-offers">
-          <ProtectedRoute component={SpecialOffersPage} />
-        </Route>
+      <Route path="/special-offers">
+        <ProtectedRoute component={SpecialOffersPage} />
+      </Route>
 
-        <Route path="/backups">
-          <ProtectedRoute component={BackupPage} />
-        </Route>
+      <Route path="/backups">
+        <ProtectedRoute component={BackupPage} />
+      </Route>
 
-        <Route path="/users">
-          <ProtectedRoute component={TelegramUsersPage} />
-        </Route>
+      <Route path="/users">
+        <ProtectedRoute component={TelegramUsersPage} />
+      </Route>
 
-        <Route path="/spam-protector">
-          <ProtectedRoute component={SpamProtectorPage} />
-        </Route>
+      <Route path="/spam-protector">
+        <ProtectedRoute component={SpamProtectorPage} />
+      </Route>
 
-        <Route path="/telegram-client">
-          <ProtectedRoute component={TelegramClientPage} />
-        </Route>
+      <Route path="/telegram-client">
+        <ProtectedRoute component={TelegramClientPage} />
+      </Route>
 
-        <Route path="/forward">
-          <ProtectedRoute component={ForwardPage} />
-        </Route>
+      <Route path="/forward">
+        <ProtectedRoute component={ForwardPage} />
+      </Route>
 
-        {/* Fallback to 404 */}
-        <Route component={NotFound} />
-      </Switch>
-    </Suspense>
+      {/* Fallback to 404 */}
+      <Route component={NotFound} />
+    </Switch>
   );
 }
 
