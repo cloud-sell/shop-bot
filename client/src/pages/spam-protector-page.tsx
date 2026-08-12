@@ -72,8 +72,8 @@ export default function SpamProtectorPage() {
 
   // Local Form Controls for Configuration
   const [autoBanEnabled, setAutoBanEnabled] = useState<boolean>(true);
-  const [maxReqInput, setMaxReqInput] = useState<string>("");
-  const [tempBanInput, setTempBanInput] = useState<string>("");
+  const [maxReqInput, setMaxReqInput] = useState<string>("15");
+  const [tempBanInput, setTempBanInput] = useState<string>("15");
   const [isDirty, setIsDirty] = useState<boolean>(false);
 
   // Sync Form inputs with server data whenever fresh data arrives (unless user has pending un-saved edits)
@@ -143,17 +143,14 @@ export default function SpamProtectorPage() {
   });
 
   const handleConfigSave = () => {
-    const maxReqNum = parseInt(maxReqInput, 10);
-    const tempMinsNum = parseInt(tempBanInput, 10);
+    const rawMaxReq = parseInt(maxReqInput.trim(), 10);
+    const rawTempMins = parseInt(tempBanInput.trim(), 10);
 
-    if (isNaN(maxReqNum) || maxReqNum <= 0) {
-      toast({ title: "Invalid Input", description: "Max requests per minute must be a positive number.", variant: "destructive" });
-      return;
-    }
-    if (isNaN(tempMinsNum) || tempMinsNum <= 0) {
-      toast({ title: "Invalid Input", description: "Penalty duration must be a positive number.", variant: "destructive" });
-      return;
-    }
+    const maxReqNum = !isNaN(rawMaxReq) && rawMaxReq > 0 ? rawMaxReq : 15;
+    const tempMinsNum = !isNaN(rawTempMins) && rawTempMins > 0 ? rawTempMins : 15;
+
+    setMaxReqInput(String(maxReqNum));
+    setTempBanInput(String(tempMinsNum));
 
     configMutation.mutate({
       autoBanEnabled,
