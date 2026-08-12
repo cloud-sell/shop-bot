@@ -67,23 +67,21 @@ export default function SpamProtectorPage() {
   // Main Anti-Spam Data Query
   const { data, isLoading, refetch, isFetching } = useQuery<SpamStatsResponse>({
     queryKey: ["/api/spam-protector/stats"],
-    staleTime: 0, // Always fetch fresh data on navigation
   });
 
   // Local Form Controls for Configuration
   const [autoBanEnabled, setAutoBanEnabled] = useState<boolean>(true);
-  const [maxReqInput, setMaxReqInput] = useState<string>("15");
-  const [tempBanInput, setTempBanInput] = useState<string>("15");
-  const [isDirty, setIsDirty] = useState<boolean>(false);
+  const [maxReqInput, setMaxReqInput] = useState<string>("");
+  const [tempBanInput, setTempBanInput] = useState<string>("");
 
-  // Sync Form inputs with server data whenever fresh data arrives (unless user has pending un-saved edits)
+  // Sync Form inputs with server data whenever fresh data arrives
   useEffect(() => {
-    if (data && !isDirty) {
+    if (data) {
       setAutoBanEnabled(Boolean(data.autoBanEnabled));
       setMaxReqInput(String(data.maxReqPerMin ?? 15));
       setTempBanInput(String(data.tempBanDurationMins ?? 15));
     }
-  }, [data, isDirty]);
+  }, [data]);
 
   // Setup WebSocket real-time updates listener
   useEffect(() => {
@@ -114,7 +112,6 @@ export default function SpamProtectorPage() {
         setAutoBanEnabled(newAutoBan);
         setMaxReqInput(String(newMaxReq));
         setTempBanInput(String(newTempMins));
-        setIsDirty(false);
 
         queryClient.setQueryData<SpamStatsResponse>(["/api/spam-protector/stats"], (old) => {
           if (!old) return old;
@@ -130,7 +127,7 @@ export default function SpamProtectorPage() {
       refetch();
       toast({
         title: "🛡️ Anti-Spam Rules Saved",
-        description: "Rate limiting and auto-ban rules have been saved to database.",
+        description: `Max requests per min set to ${maxReqInput} and penalty to ${tempBanInput} mins.`,
       });
     },
     onError: (error: any) => {
@@ -220,10 +217,7 @@ export default function SpamProtectorPage() {
         </div>
 
         <Button
-          onClick={() => {
-            setIsDirty(false);
-            refetch();
-          }}
+          onClick={() => refetch()}
           disabled={isFetching}
           variant="outline"
           className="glass-panel border-white/20 text-white hover:bg-white/10 h-11 px-5 rounded-xl font-bold text-sm"
@@ -314,11 +308,9 @@ export default function SpamProtectorPage() {
                 <p className="text-xs text-white/50 mt-1">Auto-suspend spammers exceeding rate limit.</p>
               </div>
               <Switch
+                disabled={isLoading}
                 checked={autoBanEnabled}
-                onCheckedChange={(val) => {
-                  setAutoBanEnabled(val);
-                  setIsDirty(true);
-                }}
+                onCheckedChange={setAutoBanEnabled}
                 className="data-[state=checked]:bg-emerald-500"
               />
             </div>
@@ -330,12 +322,10 @@ export default function SpamProtectorPage() {
                 type="number"
                 min="1"
                 max="500"
+                disabled={isLoading}
                 value={maxReqInput}
-                onChange={(e) => {
-                  setMaxReqInput(e.target.value);
-                  setIsDirty(true);
-                }}
-                placeholder="15"
+                onChange={(e) => setMaxReqInput(e.target.value)}
+                placeholder={isLoading ? "Loading..." : "15"}
                 className="glass-panel border-white/10 text-white font-bold h-11 text-base bg-black/40"
               />
             </div>
@@ -347,12 +337,10 @@ export default function SpamProtectorPage() {
                 type="number"
                 min="1"
                 max="1440"
+                disabled={isLoading}
                 value={tempBanInput}
-                onChange={(e) => {
-                  setTempBanInput(e.target.value);
-                  setIsDirty(true);
-                }}
-                placeholder="15"
+                onChange={(e) => setTempBanInput(e.target.value)}
+                placeholder={isLoading ? "Loading..." : "15"}
                 className="glass-panel border-white/10 text-white font-bold h-11 text-base bg-black/40"
               />
             </div>
@@ -361,7 +349,7 @@ export default function SpamProtectorPage() {
           <div className="flex justify-end pt-2">
             <Button
               onClick={handleConfigSave}
-              disabled={configMutation.isPending}
+              disabled={configMutation.isPending || isLoading}
               className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-bold px-8 h-12 rounded-xl shadow-lg transition-all"
             >
               {configMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Save className="w-5 h-5 mr-2" />}
