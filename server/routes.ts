@@ -20,6 +20,7 @@ import TelegramBot from "node-telegram-bot-api";
 import crypto from "crypto";
 import axios from "axios";
 import { sendAdminPushNotification, initPushNotifications } from "./push-notifications";
+import { initAdminBotController } from "./admin-bot-controller";
 import bcrypt from "bcryptjs";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
@@ -3796,15 +3797,44 @@ async function processAntiSpamCheck(userId: string, chatId: number, queryId?: st
           }
         } catch (err) { }
 
-        const keyboard: any[] = [
-          [
-            { text: 'CryptoBot', callback_data: 'payment_cryptobot', icon_custom_emoji_id: '5361543877599724417' },
-            { text: 'Cryptomus', callback_data: 'payment_cryptomus', icon_custom_emoji_id: '5341506639688126935' }
-          ],
-          [
-            { text: 'Binance Pay', callback_data: 'payment_binance', icon_custom_emoji_id: '6235482598924095547' }
-          ]
-        ];
+        const cryptobotEnabled = (await storage.getSetting('PAYMENT_CRYPTOBOT_ENABLED'))?.value !== 'false';
+        const cryptomusEnabled = (await storage.getSetting('PAYMENT_CRYPTOMUS_ENABLED'))?.value !== 'false';
+        const binanceEnabled = (await storage.getSetting('PAYMENT_BINANCE_ENABLED'))?.value !== 'false';
+        const trc20Enabled = (await storage.getSetting('PAYMENT_TRC20_ENABLED'))?.value === 'true';
+        const aptosEnabled = (await storage.getSetting('PAYMENT_APTOS_ENABLED'))?.value === 'true';
+
+        const keyboard: any[][] = [];
+
+        const row1: any[] = [];
+        if (cryptobotEnabled) {
+          row1.push({ text: 'CryptoBot', callback_data: 'payment_cryptobot', icon_custom_emoji_id: '5361543877599724417' });
+        }
+        if (cryptomusEnabled) {
+          row1.push({ text: 'Cryptomus', callback_data: 'payment_cryptomus', icon_custom_emoji_id: '5341506639688126935' });
+        }
+        if (row1.length > 0) keyboard.push(row1);
+
+        const row2: any[] = [];
+        if (binanceEnabled) {
+          row2.push({ text: 'Binance Pay', callback_data: 'payment_binance', icon_custom_emoji_id: '6235482598924095547' });
+        }
+        if (trc20Enabled) {
+          row2.push({ text: 'TRC20 (USDT)', callback_data: 'payment_trc20', icon_custom_emoji_id: '5201692367437974073' });
+        }
+        if (row2.length > 0) keyboard.push(row2);
+
+        const row3: any[] = [];
+        if (aptosEnabled) {
+          row3.push({ text: 'Aptos (USDT)', callback_data: 'payment_aptos', icon_custom_emoji_id: '5798849051017352095' });
+        }
+        if (row3.length > 0) keyboard.push(row3);
+
+        if (keyboard.length === 0) {
+          await targetBot.sendMessage(chatId, `<tg-emoji emoji-id="5215264669865842880">⚠️</tg-emoji> <b>Payment methods are currently unavailable.</b>\n\nAll deposit methods are disabled by admin. Please contact support.`, {
+            parse_mode: 'HTML'
+          });
+          return;
+        }
 
         await targetBot.sendMessage(chatId, `<tg-emoji emoji-id="5201692367437974073">💰</tg-emoji> <b>Select Payment Method:</b>`, {
           parse_mode: 'HTML',
@@ -3814,6 +3844,16 @@ async function processAntiSpamCheck(userId: string, chatId: number, queryId?: st
       }
 
       if (data === 'payment_cryptobot') {
+        const cryptobotEnabled = (await storage.getSetting('PAYMENT_CRYPTOBOT_ENABLED'))?.value !== 'false';
+        if (!cryptobotEnabled) {
+          if (queryId) {
+            await targetBot.answerCallbackQuery(queryId, { text: '❌ CryptoBot payments are currently disabled.', show_alert: true }).catch(() => {});
+          } else {
+            await targetBot.sendMessage(chatId, '❌ CryptoBot payments are currently disabled by the admin.');
+          }
+          return;
+        }
+
         try {
           if (query.message) {
             await targetBot.deleteMessage(chatId, query.message.message_id);
@@ -3917,6 +3957,16 @@ async function processAntiSpamCheck(userId: string, chatId: number, queryId?: st
       }
 
       if (data === 'payment_binance') {
+        const binanceEnabled = (await storage.getSetting('PAYMENT_BINANCE_ENABLED'))?.value !== 'false';
+        if (!binanceEnabled) {
+          if (queryId) {
+            await targetBot.answerCallbackQuery(queryId, { text: '❌ Binance Pay is currently disabled.', show_alert: true }).catch(() => {});
+          } else {
+            await targetBot.sendMessage(chatId, '❌ Binance Pay is currently disabled by the admin.');
+          }
+          return;
+        }
+
         try {
           if (query.message) {
             await targetBot.deleteMessage(chatId, query.message.message_id);
@@ -3942,6 +3992,16 @@ async function processAntiSpamCheck(userId: string, chatId: number, queryId?: st
       }
 
       if (data === 'payment_cryptomus') {
+        const cryptomusEnabled = (await storage.getSetting('PAYMENT_CRYPTOMUS_ENABLED'))?.value !== 'false';
+        if (!cryptomusEnabled) {
+          if (queryId) {
+            await targetBot.answerCallbackQuery(queryId, { text: '❌ Cryptomus payments are currently disabled.', show_alert: true }).catch(() => {});
+          } else {
+            await targetBot.sendMessage(chatId, '❌ Cryptomus payments are currently disabled by the admin.');
+          }
+          return;
+        }
+
         try {
           if (query.message) {
             await targetBot.deleteMessage(chatId, query.message.message_id);
@@ -4000,6 +4060,16 @@ async function processAntiSpamCheck(userId: string, chatId: number, queryId?: st
       }
 
       if (data === 'payment_trc20') {
+        const trc20Enabled = (await storage.getSetting('PAYMENT_TRC20_ENABLED'))?.value === 'true';
+        if (!trc20Enabled) {
+          if (queryId) {
+            await targetBot.answerCallbackQuery(queryId, { text: '❌ TRC20 payments are currently disabled.', show_alert: true }).catch(() => {});
+          } else {
+            await targetBot.sendMessage(chatId, '❌ TRC20 payments are currently disabled by the admin.');
+          }
+          return;
+        }
+
         try { if (query.message) await targetBot.deleteMessage(chatId, query.message.message_id); } catch (e) {}
         const wallet = (await storage.getSetting('TRC20_WALLET_ADDRESS'))?.value;
         if (!wallet) {
@@ -4018,6 +4088,16 @@ async function processAntiSpamCheck(userId: string, chatId: number, queryId?: st
       }
 
       if (data === 'payment_aptos') {
+        const aptosEnabled = (await storage.getSetting('PAYMENT_APTOS_ENABLED'))?.value === 'true';
+        if (!aptosEnabled) {
+          if (queryId) {
+            await targetBot.answerCallbackQuery(queryId, { text: '❌ Aptos payments are currently disabled.', show_alert: true }).catch(() => {});
+          } else {
+            await targetBot.sendMessage(chatId, '❌ Aptos payments are currently disabled by the admin.');
+          }
+          return;
+        }
+
         try { if (query.message) await targetBot.deleteMessage(chatId, query.message.message_id); } catch (e) {}
         const wallet = (await storage.getSetting('APTOS_WALLET_ADDRESS'))?.value;
         if (!wallet) {
@@ -6197,6 +6277,7 @@ async function processAntiSpamCheck(userId: string, chatId: number, queryId?: st
 
 };
 initBot().catch(err => console.error("Initial bot setup failed:", err));
+initAdminBotController().catch(err => console.error("Admin bot setup failed:", err));
 
 // Start Backup Scheduler
 BackupService.startBackupScheduler().catch(err => console.error("Backup scheduler failed to start:", err));

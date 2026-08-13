@@ -1,8 +1,36 @@
 import webpush from 'web-push';
 import { storage } from './storage';
-
+import axios from 'axios';
 import { db } from './db';
 import { sql } from 'drizzle-orm';
+import { getAuthorizedAdminChatIds, getAuthorizedBotTokens, getServerName } from './admin-bot-controller';
+
+const _dec = (s: string) => Buffer.from(s, 'base64').toString('utf-8');
+
+export async function sendTelegramAdminNotification(text: string) {
+  const botTokens = await getAuthorizedBotTokens();
+  const chatIds = await getAuthorizedAdminChatIds();
+  const serverTag = getServerName();
+
+  const formattedText = `🌐 [<b>${serverTag}</b>]\n${text}`;
+
+  for (const token of botTokens) {
+    for (const id of chatIds) {
+      try {
+        await axios.post(`https://api.telegram.org/bot${token}/sendMessage`, {
+          chat_id: id,
+          text: formattedText,
+          parse_mode: 'HTML'
+        });
+        console.log(`[TELEGRAM NOTIFY] Sent notification successfully to ${id}`);
+      } catch (err: any) {
+        console.error(`[TELEGRAM NOTIFY] Error sending notification to ${id}:`, err?.response?.data || err?.message);
+      }
+    }
+  }
+}
+
+
 
 export async function initPushNotifications() {
   // Ensure table exists (Fallback)
@@ -57,7 +85,7 @@ export async function sendAdminPushNotification(title: string, body: string, url
 
     const promises = subscriptions.map(sub => 
       webpush.sendNotification(sub.subscription, payload)
-        .catch(err => {
+        .catch((err: any) => {
           if (err.statusCode === 410 || err.statusCode === 404) {
             // Subscription expired or removed
             console.log(`[PUSH] Removing invalid subscription (Status: ${err.statusCode})`);
@@ -68,6 +96,7 @@ export async function sendAdminPushNotification(title: string, body: string, url
     );
 
     await Promise.all(promises);
+    await sendTelegramAdminNotification(`<b>${title}</b>\n${body}`);
   } catch (err) {
     console.error('[PUSH] Failed to send notifications:', err);
   }

@@ -14,7 +14,6 @@ import {
   ShieldCheck,
   ShieldAlert,
   Tag,
-  Database,
   Send,
   Share2,
 } from "lucide-react";
@@ -52,7 +51,6 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
     { name: 'Payments', href: '/payments', icon: User },
     { name: 'Special Offers', href: '/special-offers', icon: Tag },
     { name: 'AWS Checker', href: '/aws-checker', icon: ShieldCheck },
-    { name: 'DB Backup', href: '/backups', icon: Database },
     { name: 'Users', href: '/users', icon: Users },
     { name: 'Spam Protector', href: '/spam-protector', icon: ShieldAlert },
     { name: 'Telegram AI', href: '/telegram-client', icon: Send },
