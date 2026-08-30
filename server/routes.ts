@@ -2004,6 +2004,7 @@ app.post("/api/broadcast/availability", isAuth, async (req, res) => {
       else if (catLower.includes('digital ocean') || catLower.includes('digitalocean')) catIcon = '<tg-emoji emoji-id="6235413342576450502">💧</tg-emoji> ';
       else if (catLower.includes('azure')) catIcon = '<tg-emoji emoji-id="6235420094265037090">☁️</tg-emoji> ';
       else if (catLower.includes('kamatera')) catIcon = '<tg-emoji emoji-id="6235239937566838722">☁️</tg-emoji> ';
+      else if (catLower.includes('up cloud') || catLower.includes('upcloud') || catLower.includes('linode') || catLower.includes('vultr') || catLower.includes('hetzner') || catLower.includes('google')) catIcon = '<tg-emoji emoji-id="5785025630055700143">☁️</tg-emoji> ';
 
       availabilityMsg += `➖➖➖ ${catIcon}<b>${category}</b> <tg-emoji emoji-id="5456343263340405032">🛍</tg-emoji> ➖➖➖\n`;
       for (const item of items) {
@@ -2225,8 +2226,19 @@ const patchBotMethods = (targetBot: TelegramBot) => {
   const originalSendVideo = targetBot.sendVideo.bind(targetBot);
   const originalSendDocument = targetBot.sendDocument.bind(targetBot);
 
+  const sanitizeTgEmojis = (text: string): string => {
+    if (!text || typeof text !== 'string') return text;
+    // Replace <tg-emoji emoji-id="NON_DIGITS">emoji</tg-emoji> with just emoji
+    return text.replace(/<tg-emoji\s+emoji-id="([^"]+)">([\s\S]*?)<\/tg-emoji>/gi, (match, emojiId, inner) => {
+      if (!/^\d+$/.test(emojiId.trim())) {
+        return inner;
+      }
+      return match;
+    });
+  };
+
   const stripEmojis = (text: string): string => {
-    if (!text) return text;
+    if (!text || typeof text !== 'string') return text;
     return text.replace(/<tg-emoji[^>]*>(.*?)<\/tg-emoji>/gi, '$1');
   };
 
@@ -2237,74 +2249,120 @@ const patchBotMethods = (targetBot: TelegramBot) => {
     const str = String(err);
     return msg.includes('DOCUMENT_INVALID') || 
            desc.includes('DOCUMENT_INVALID') || 
-           str.includes('DOCUMENT_INVALID');
+           str.includes('DOCUMENT_INVALID') ||
+           msg.includes('ENTITY_') ||
+           desc.includes('ENTITY_') ||
+           msg.includes('EMOJI_') ||
+           desc.includes('EMOJI_') ||
+           msg.includes('PARSE_') ||
+           desc.includes('PARSE_') ||
+           msg.includes("can't parse entities") ||
+           desc.includes("can't parse entities");
   };
 
   targetBot.sendMessage = async function(chatId: any, text: string, options?: any) {
+    const cleanInput = sanitizeTgEmojis(text);
     try {
-      return await originalSendMessage(chatId, text, options);
+      return await originalSendMessage(chatId, cleanInput, options);
     } catch (err: any) {
-      if (isDocumentInvalid(err) && typeof text === 'string' && text.includes('<tg-emoji')) {
-        console.warn(`[Bot API] DOCUMENT_INVALID detected. Stripping tg-emoji tags and retrying sendMessage to ${chatId}`);
-        const cleanText = stripEmojis(text);
-        return await originalSendMessage(chatId, cleanText, options);
+      if (typeof cleanInput === 'string' && (cleanInput.includes('<tg-emoji') || isDocumentInvalid(err))) {
+        console.warn(`[Bot API] Telegram error detected. Stripping tg-emoji tags and retrying sendMessage to ${chatId}: ${err?.message || err}`);
+        try {
+          const cleanText = stripEmojis(cleanInput);
+          return await originalSendMessage(chatId, cleanText, options);
+        } catch (retryErr: any) {
+          console.error(`[Bot API Handled Error] Failed sendMessage to ${chatId}:`, retryErr?.message || retryErr);
+          return null;
+        }
       }
-      throw err;
+      console.error(`[Bot API Handled Error] Failed sendMessage to ${chatId}:`, err?.message || err);
+      return null;
     }
   } as any;
 
   targetBot.editMessageText = async function(text: string, options?: any) {
+    const cleanInput = sanitizeTgEmojis(text);
     try {
-      return await originalEditMessageText(text, options);
+      return await originalEditMessageText(cleanInput, options);
     } catch (err: any) {
-      if (isDocumentInvalid(err) && typeof text === 'string' && text.includes('<tg-emoji')) {
-        console.warn(`[Bot API] DOCUMENT_INVALID detected. Stripping tg-emoji tags and retrying editMessageText`);
-        const cleanText = stripEmojis(text);
-        return await originalEditMessageText(cleanText, options);
+      if (typeof cleanInput === 'string' && (cleanInput.includes('<tg-emoji') || isDocumentInvalid(err))) {
+        console.warn(`[Bot API] Telegram error detected. Stripping tg-emoji tags and retrying editMessageText: ${err?.message || err}`);
+        try {
+          const cleanText = stripEmojis(cleanInput);
+          return await originalEditMessageText(cleanText, options);
+        } catch (retryErr: any) {
+          console.error(`[Bot API Handled Error] Failed editMessageText:`, retryErr?.message || retryErr);
+          return null;
+        }
       }
-      throw err;
+      console.error(`[Bot API Handled Error] Failed editMessageText:`, err?.message || err);
+      return null;
     }
   } as any;
 
   targetBot.sendPhoto = async function(chatId: any, photo: any, options?: any) {
+    const caption = options?.caption;
+    const cleanCaption = sanitizeTgEmojis(caption);
+    const opts = cleanCaption !== undefined ? { ...options, caption: cleanCaption } : options;
     try {
-      return await originalSendPhoto(chatId, photo, options);
+      return await originalSendPhoto(chatId, photo, opts);
     } catch (err: any) {
-      const caption = options?.caption;
-      if (isDocumentInvalid(err) && typeof caption === 'string' && caption.includes('<tg-emoji')) {
-        console.warn(`[Bot API] DOCUMENT_INVALID detected. Stripping tg-emoji tags and retrying sendPhoto to ${chatId}`);
-        const cleanOptions = { ...options, caption: stripEmojis(caption) };
-        return await originalSendPhoto(chatId, photo, cleanOptions);
+      if (typeof cleanCaption === 'string' && (cleanCaption.includes('<tg-emoji') || isDocumentInvalid(err))) {
+        console.warn(`[Bot API] Telegram error detected. Stripping tg-emoji tags and retrying sendPhoto to ${chatId}: ${err?.message || err}`);
+        try {
+          const cleanOptions = { ...options, caption: stripEmojis(cleanCaption) };
+          return await originalSendPhoto(chatId, photo, cleanOptions);
+        } catch (retryErr: any) {
+          console.error(`[Bot API Handled Error] Failed sendPhoto to ${chatId}:`, retryErr?.message || retryErr);
+          return null;
+        }
       }
-      throw err;
+      console.error(`[Bot API Handled Error] Failed sendPhoto to ${chatId}:`, err?.message || err);
+      return null;
     }
   } as any;
 
   targetBot.sendVideo = async function(chatId: any, video: any, options?: any) {
+    const caption = options?.caption;
+    const cleanCaption = sanitizeTgEmojis(caption);
+    const opts = cleanCaption !== undefined ? { ...options, caption: cleanCaption } : options;
     try {
-      return await originalSendVideo(chatId, video, options);
+      return await originalSendVideo(chatId, video, opts);
     } catch (err: any) {
-      const caption = options?.caption;
-      if (isDocumentInvalid(err) && typeof caption === 'string' && caption.includes('<tg-emoji')) {
-        console.warn(`[Bot API] DOCUMENT_INVALID detected. Stripping tg-emoji tags and retrying sendVideo to ${chatId}`);
-        const cleanOptions = { ...options, caption: stripEmojis(caption) };
-        return await originalSendVideo(chatId, video, cleanOptions);
+      if (typeof cleanCaption === 'string' && (cleanCaption.includes('<tg-emoji') || isDocumentInvalid(err))) {
+        console.warn(`[Bot API] Telegram error detected. Stripping tg-emoji tags and retrying sendVideo to ${chatId}: ${err?.message || err}`);
+        try {
+          const cleanOptions = { ...options, caption: stripEmojis(cleanCaption) };
+          return await originalSendVideo(chatId, video, cleanOptions);
+        } catch (retryErr: any) {
+          console.error(`[Bot API Handled Error] Failed sendVideo to ${chatId}:`, retryErr?.message || retryErr);
+          return null;
+        }
       }
-      throw err;
+      console.error(`[Bot API Handled Error] Failed sendVideo to ${chatId}:`, err?.message || err);
+      return null;
     }
   } as any;
 
   targetBot.sendDocument = async function(chatId: any, doc: any, options?: any) {
+    const caption = options?.caption;
+    const cleanCaption = sanitizeTgEmojis(caption);
+    const opts = cleanCaption !== undefined ? { ...options, caption: cleanCaption } : options;
     try {
-      return await originalSendDocument(chatId, doc, options);
+      return await originalSendDocument(chatId, doc, opts);
     } catch (err: any) {
-      const caption = options?.caption;
-      if (isDocumentInvalid(err) && typeof caption === 'string' && caption.includes('<tg-emoji')) {
-        console.warn(`[Bot API] DOCUMENT_INVALID detected. Stripping tg-emoji tags and retrying sendDocument to ${chatId}`);
-        const cleanOptions = { ...options, caption: stripEmojis(caption) };
-        return await originalSendDocument(chatId, doc, cleanOptions);
+      if (typeof cleanCaption === 'string' && (cleanCaption.includes('<tg-emoji') || isDocumentInvalid(err))) {
+        console.warn(`[Bot API] Telegram error detected. Stripping tg-emoji tags and retrying sendDocument to ${chatId}: ${err?.message || err}`);
+        try {
+          const cleanOptions = { ...options, caption: stripEmojis(cleanCaption) };
+          return await originalSendDocument(chatId, doc, cleanOptions);
+        } catch (retryErr: any) {
+          console.error(`[Bot API Handled Error] Failed sendDocument to ${chatId}:`, retryErr?.message || retryErr);
+          return null;
+        }
       }
-      throw err;
+      console.error(`[Bot API Handled Error] Failed sendDocument to ${chatId}:`, err?.message || err);
+      return null;
     }
   } as any;
 };
