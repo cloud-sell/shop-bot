@@ -32,6 +32,26 @@ export async function sendTelegramAdminNotification(text: string) {
 
 
 
+function isValidVapidPrivateKey(key?: string): boolean {
+  if (!key || typeof key !== 'string') return false;
+  try {
+    const buf = Buffer.from(key, 'base64url');
+    return buf.length === 32;
+  } catch {
+    return false;
+  }
+}
+
+function isValidVapidPublicKey(key?: string): boolean {
+  if (!key || typeof key !== 'string') return false;
+  try {
+    const buf = Buffer.from(key, 'base64url');
+    return buf.length === 65;
+  } catch {
+    return false;
+  }
+}
+
 export async function initPushNotifications() {
   // Ensure table exists (Fallback)
   try {
@@ -48,27 +68,53 @@ export async function initPushNotifications() {
     console.error('[PUSH] Table creation error:', err);
   }
 
-  let publicKey = (await storage.getSetting('VAPID_PUBLIC_KEY'))?.value;
-  let privateKey = (await storage.getSetting('VAPID_PRIVATE_KEY'))?.value;
-  let subject = (await storage.getSetting('VAPID_SUBJECT'))?.value;
+  const DEFAULT_PUBLIC_KEY = "BFckrAXPPUxAFNKv-x2Nf15fDRlW3EB3vGSkQRfzK2senQfgMu4zpsfyXaQIaJIL08CRhQV9crIxsGCP9O8EVGo";
+  const DEFAULT_PRIVATE_KEY = "wh2TVIBQgv77xKK8sfTMgOV-r-vaJOvIXBcqtj4DZCo";
+  const DEFAULT_SUBJECT = "mailto:imeshcheak@gmail.com";
 
-  if (!publicKey || !privateKey || !subject) {
-    if (!publicKey) publicKey = "BLi12JZdvdRbULvhPcN-pwedf_t72vUTO4XT-R_AfB58GRSfr_wkB7G-KFffQXFclHxhOQn4Qf-yidRm0o0_Img";
-    if (!privateKey) privateKey = "rfNmhj1wxk2Bo4zjk5lY7PeOadLP6ZHbvVooox7qdIY";
-    if (!subject) subject = "mailto:imeshcheak@gmail.com";
+  let publicKey = process.env.VAPID_PUBLIC_KEY || (await storage.getSetting('VAPID_PUBLIC_KEY'))?.value;
+  let privateKey = process.env.VAPID_PRIVATE_KEY || (await storage.getSetting('VAPID_PRIVATE_KEY'))?.value;
+  let subject = process.env.VAPID_SUBJECT || (await storage.getSetting('VAPID_SUBJECT'))?.value;
 
+  if (!isValidVapidPublicKey(publicKey)) {
+    if (publicKey) console.warn(`[PUSH] Provided VAPID_PUBLIC_KEY is invalid. Using default fallback.`);
+    publicKey = DEFAULT_PUBLIC_KEY;
     await storage.setSetting('VAPID_PUBLIC_KEY', publicKey);
+  }
+
+  if (!isValidVapidPrivateKey(privateKey)) {
+    if (privateKey) console.warn(`[PUSH] Provided VAPID_PRIVATE_KEY is invalid (must be 32 bytes when base64-decoded). Using default fallback.`);
+    privateKey = DEFAULT_PRIVATE_KEY;
     await storage.setSetting('VAPID_PRIVATE_KEY', privateKey);
+  }
+
+  if (!subject) {
+    subject = DEFAULT_SUBJECT;
     await storage.setSetting('VAPID_SUBJECT', subject);
   }
 
-  webpush.setVapidDetails(
-    subject,
-    publicKey,
-    privateKey
-  );
-  
-  console.log('[PUSH] Initialized with user-configured VAPID keys');
+  try {
+    webpush.setVapidDetails(
+      subject,
+      publicKey,
+      privateKey
+    );
+    console.log('[PUSH] Initialized with valid VAPID keys');
+  } catch (err: any) {
+    console.error('[PUSH] Error setting VAPID details with current keys, trying default fallback keys:', err?.message || err);
+    try {
+      webpush.setVapidDetails(
+        DEFAULT_SUBJECT,
+        DEFAULT_PUBLIC_KEY,
+        DEFAULT_PRIVATE_KEY
+      );
+      publicKey = DEFAULT_PUBLIC_KEY;
+      console.log('[PUSH] Initialized with fallback default VAPID keys after error');
+    } catch (fallbackErr: any) {
+      console.error('[PUSH] Failed to initialize push notifications:', fallbackErr?.message || fallbackErr);
+    }
+  }
+
   return { publicKey };
 }
 
